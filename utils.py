@@ -11,11 +11,23 @@ def get_adjacent_coords(x, y):
     return [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
 
 def random_resource():
-    """Return a random resource type"""
-    from config import RESOURCE_TYPES
-    resources = list(RESOURCE_TYPES.keys())
-    resources.remove('EMPTY')
-    # 30% chance of empty tile
+    """Return a random resource type based on rarity settings"""
+    from config import RESOURCE_TYPES, RESOURCE_DISTRIBUTION, RESOURCE_RARITY
+    
+    # First decide if empty or not (30% chance of empty)
     if random.random() < 0.3:
         return 'EMPTY'
-    return random.choice(resources)
+    
+    # Create weighted distribution of resources based on rarity
+    resource_weights = {}
+    for resource, data in RESOURCE_DISTRIBUTION.items():
+        if resource != 'EMPTY':
+            rarity_type = data['rarity']
+            resource_weights[resource] = RESOURCE_RARITY[rarity_type]['multiplier']
+    
+    # Get weighted random choice
+    total_weight = sum(resource_weights.values())
+    resources = list(resource_weights.keys())
+    weights = [resource_weights[r]/total_weight for r in resources]
+    
+    return random.choices(resources, weights=weights, k=1)[0]

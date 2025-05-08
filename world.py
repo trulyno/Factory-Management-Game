@@ -2,6 +2,7 @@ import random
 from config import *
 import utils
 import pygame
+from entities import Building
 
 class Tile:
     def __init__(self, x, y, resource_type='EMPTY', owner=None):
@@ -10,7 +11,14 @@ class Tile:
         self.resource_type = resource_type
         self.owner = owner
         self.building = None
+        self.building_instance = None
         self.surveyed = False
+        self.world = None  # Set by World class
+        
+    def update(self, dt):
+        """Update tile state"""
+        if self.building_instance:
+            self.building_instance.update(dt)
         
     def can_build(self, building_type):
         """Check if a building can be placed on this tile"""
@@ -21,6 +29,28 @@ class Tile:
         if building_type == 'CENTRAL' and self.resource_type != 'EMPTY':
             return False
         return True
+
+    def set_building(self, building_type):
+        """Set the building type and create its instance"""
+        self.building = building_type
+        if building_type:
+            self.building_instance = Building(self, building_type)
+            
+            # Enable autosell by default for AI deposit buildings
+            if building_type == 'DEPOSIT' and self.owner and self.owner.startswith('ai_'):
+                from config import RESOURCE_TYPES
+                # Enable autosell for all resource types
+                for resource in RESOURCE_TYPES:
+                    if resource != 'EMPTY':
+                        self.building_instance.autosell[resource] = True
+        else:
+            self.building_instance = None
+
+    def get_total_resources(self):
+        """Get total resources stored in building"""
+        if self.building_instance:
+            return self.building_instance.get_total_resources()
+        return 0
 
     def draw(self, surface, camera_offset=(0, 0)):
         """Draw the tile on the surface"""
@@ -66,9 +96,11 @@ class Tile:
         return TILE_BASE_COST
 
 class World:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
+    def __init__(self):
+        # Use the configured world size from config
+        from config import WORLD_SIZE
+        self.width = WORLD_SIZE['width']
+        self.height = WORLD_SIZE['height']
         self.tiles = {}
         self.generate_world()
         
@@ -77,7 +109,9 @@ class World:
         for x in range(self.width):
             for y in range(self.height):
                 resource = utils.random_resource()
-                self.tiles[(x, y)] = Tile(x, y, resource)
+                tile = Tile(x, y, resource)
+                tile.world = self  # Set reference to world
+                self.tiles[(x, y)] = tile
     
     def setup_player_start(self, player):
         """Set up the player's starting area"""
@@ -89,6 +123,9 @@ class World:
         self.tiles[(center_x, center_y)].building = 'CENTRAL'
         self.tiles[(center_x, center_y)].surveyed = True
         
+        # Count initial tiles
+        tile_count = 1
+        
         # Make sure at least one adjacent tile has a resource
         adjacents = utils.get_adjacent_coords(center_x, center_y)
         resource_placed = False
@@ -97,6 +134,7 @@ class World:
             if (x, y) in self.tiles:
                 self.tiles[(x, y)].owner = 'player'
                 self.tiles[(x, y)].surveyed = True
+                tile_count += 1
                 if not resource_placed:
                     self.tiles[(x, y)].resource_type = random.choice(['WOOD', 'STONE', 'IRON_ORE'])
                     resource_placed = True
@@ -107,11 +145,20 @@ class World:
             if pos in self.tiles:
                 self.tiles[pos].owner = 'player'
                 self.tiles[pos].surveyed = True
+                tile_count += 1
                 break
+        
+        # Update initial stats
+        from game import Game
+        if Game.instance and hasattr(Game.instance, 'stats'):
+            Game.instance.stats.tiles_owned = tile_count
+            Game.instance.stats.num_buildings = 1  # Starting with central building
     
-    def setup_ai_factories(self, num_factories=2):
-        """Set up AI factories in the world"""
-        for i in range(num_factories):
+    def setup_ai_factories(self):
+        """Set up AI factories in the world using the configured number of AI players"""
+        from config import NUM_AI_PLAYERS
+        
+        for i in range(NUM_AI_PLAYERS):
             # Find a location away from the player
             while True:
                 x = random.randint(0, self.width - 1)
@@ -123,11 +170,13 @@ class World:
             # Set up AI territory
             self.tiles[(x, y)].owner = f'ai_{i}'
             self.tiles[(x, y)].building = 'CENTRAL'
+            self.tiles[(x, y)].surveyed = True
             
             # Add surrounding tiles
             for adj_x, adj_y in utils.get_adjacent_coords(x, y):
                 if (adj_x, adj_y) in self.tiles:
                     self.tiles[(adj_x, adj_y)].owner = f'ai_{i}'
+                    self.tiles[(adj_x, adj_y)].surveyed = True
     
     def can_buy_tile(self, x, y, owner):
         """Check if a tile can be bought by the owner"""
@@ -144,6 +193,11 @@ class World:
                 return True
                 
         return False
+    
+    def update(self, dt):
+        """Update all tiles"""
+        for tile in self.tiles.values():
+            tile.update(dt)
     
     def draw(self, surface, camera_offset=(0, 0)):
         """Draw the world on the surface"""

@@ -18,6 +18,10 @@ class Player:
             self.money -= cost
             tile.owner = 'player'
             self.owned_tiles.append(tile)
+            # Update stats
+            from game import Game
+            Game.instance.stats.total_money_spent += cost
+            Game.instance.stats.tiles_owned += 1
             return True
         return False
     
@@ -34,7 +38,11 @@ class Player:
             return False
             
         self.money -= cost
-        tile.building = building_type
+        tile.set_building(building_type)  # Using new set_building method
+        from game import Game
+        Game.instance.stats.total_money_spent += cost
+        Game.instance.stats.num_buildings += 1
+        Game.instance.logger.log('PLAYER', 'BUILD', f'Built {building_type} at ({tile.x}, {tile.y})')
         return True
     
     def survey_tile(self, tile):
@@ -42,13 +50,33 @@ class Player:
         if self.can_afford(SURVEY_COST):
             self.money -= SURVEY_COST
             tile.surveyed = True
+            from game import Game
+            Game.instance.stats.total_money_spent += SURVEY_COST
+            Game.instance.logger.log('PLAYER', 'SURVEY', f'Surveyed tile at ({tile.x}, {tile.y})')
             return True
         return False
     
     def sell_resources(self, deposit_building, resource_type, amount, price_per_unit):
         """Sell resources from a deposit building"""
-        if resource_type in deposit_building.resources and deposit_building.resources[resource_type] >= amount:
-            deposit_building.resources[resource_type] -= amount
-            self.money += amount * price_per_unit
+        resources = None
+        
+        # Check if deposit_building is a Building or a Tile with building_instance
+        if hasattr(deposit_building, 'resources'):
+            # It's already a Building object
+            resources = deposit_building.resources
+        elif hasattr(deposit_building, 'building_instance') and deposit_building.building_instance:
+            # It's a Tile with a building_instance
+            resources = deposit_building.building_instance.resources
+        else:
+            # Neither a Building nor a Tile with building_instance
+            return False
+            
+        if resource_type in resources and resources[resource_type] >= amount:
+            resources[resource_type] -= amount
+            revenue = amount * price_per_unit
+            self.money += revenue
+            # Update stats
+            from game import Game
+            Game.instance.stats.total_money_generated += revenue
             return True
         return False

@@ -2,7 +2,10 @@ import random
 from config import *
 
 class Market:
+    instance = None  # Class variable for global access
+    
     def __init__(self):
+        Market.instance = self  # Set this instance as the global one
         self.prices = {}
         self.supply = {}
         self.demand = {}
@@ -70,6 +73,10 @@ class Market:
             self.demand[resource] = self.demand.get(resource, 0) + actual_amount
             
         return price * actual_amount, actual_amount
+
+    def get_price(self, resource):
+        """Get current price for a resource"""
+        return self.prices.get(resource, 0)
 
 class TradeOffer:
     def __init__(self, sender, receiver, offer_resource, offer_amount, request_resource, request_amount):
