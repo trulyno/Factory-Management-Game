@@ -28,10 +28,10 @@ WORLD_SIZE = WORLD_SIZE_MEDIUM  # Default world size
 
 # Resource rarity settings
 RESOURCE_RARITY = {
-    'COMMON': {'multiplier': 1.0},
-    'NORMAL': {'multiplier': 0.7},
-    'RARE': {'multiplier': 0.4},
-    'VERY_RARE': {'multiplier': 0.2}
+    'COMMON': {'multiplier': 1.0, 'durability_range': (50, 80)},
+    'NORMAL': {'multiplier': 0.7, 'durability_range': (30, 50)},
+    'RARE': {'multiplier': 0.4, 'durability_range': (15, 30)},
+    'VERY_RARE': {'multiplier': 0.2, 'durability_range': (5, 15)}
 }
 
 # Resource distribution (default rarity is NORMAL)
@@ -64,7 +64,8 @@ PROCESSED_RESOURCES = {
     'COPPER_INGOT': {'from': 'COPPER_ORE', 'value': 60, 'time': 5, 'color': (184, 115, 51)},
     'GOLD_INGOT': {'from': 'GOLD_ORE', 'value': 100, 'time': 10, 'color': YELLOW},
     'BRICK': {'from': 'CLAY', 'value': 25, 'time': 3, 'color': RED},
-    'STEEL': {'from': 'IRON_INGOT', 'value': 100, 'time': 12, 'color': (100, 100, 120)}
+    'STEEL': {'from': 'IRON_INGOT', 'value': 100, 'time': 12, 'color': (100, 100, 120)},
+    'PLANK': {'from': 'WOOD', 'value': 20, 'time': 2, 'color': (139, 69, 19)},
 }
 
 # Processing recipes
@@ -103,24 +104,49 @@ RECIPES = {
         'output': 'STEEL',
         'duration': 12,
         'output_amount': 1
+    },
+    'PLANK': {
+        'input1': 'WOOD',
+        'input2': None,
+        'output': 'PLANK',
+        'duration': 3,
+        'output_amount': 2
     }
 }
 
 # Building types and costs
 BUILDINGS = {
-    'CENTRAL': {'cost': 0, 'color': BLUE},
-    'COLLECTION': {'cost': 50, 'color': GREEN},
-    'DEPOSIT': {'cost': 100, 'color': YELLOW},
-    'PROCESSING': {'cost': 200, 'color': PURPLE},
-    'COMMERCE': {'cost': 300, 'color': RED}
+    'CENTRAL': {'base_cost': 0, 'cost': 0, 'color': BLUE},
+    'COLLECTION': {'base_cost': 50, 'cost': 50, 'color': GREEN},
+    'DEPOSIT': {'base_cost': 100, 'cost': 100, 'color': YELLOW},
+    'PROCESSING': {'base_cost': 200, 'cost': 200, 'color': PURPLE},
+    'COMMERCE': {'base_cost': 300, 'cost': 300, 'color': RED}
 }
 
 # Game settings
 INITIAL_MONEY = 1000
 INITIAL_TILES = 5
 WIN_CONDITION = 10000
-SURVEY_COST = 50
+
+# Base pricing settings
+SURVEY_BASE_COST = 50
 TILE_BASE_COST = 100
+TILE_COST_MULTIPLIER = 0.8
+
+# Dynamic pricing configuration
+PRICE_UPDATE_INTERVAL = 60  # Seconds between price adjustments (more frequent updates)
+PRICE_INCREASE_RATE = 0.005  # Base percentage increase per update (smoother progression)
+MAX_PRICE_MULTIPLIER = 5.0  # Maximum price multiplier from base price
+MIN_PRICE_MULTIPLIER = 0.5  # Minimum price multiplier (prevents prices getting too low)
+ECONOMY_SCALING_FACTOR = 0.00001  # How much total economy affects prices
+BUILDINGS_SCALING_FACTOR = 0.002  # How much total buildings affects prices
+TILES_SCALING_FACTOR = 0.001  # How much surveyed tiles affects prices
+TIME_SCALING_FACTOR = 0.0001  # How much game time affects prices
+DIFFICULTY_SCALING = {
+    'EASY': 0.7,      # 70% of normal price increases
+    'NORMAL': 1.0,    # Normal price increases
+    'HARD': 1.3       # 130% of normal price increases
+}
 
 # Collection and Transport settings
 COLLECTION_DURATION = 5  # seconds between resource collection
@@ -145,8 +171,14 @@ AI_COMMERCE_THRESHOLD = 1500  # Money threshold before considering commerce buil
 AI_PROCESSING_THRESHOLD = 800  # Money threshold before considering processing buildings
 AI_EXPANSION_RATE = 0.7  # Higher values make AI more likely to expand territory
 
+# Market settings
+MARKET_UPDATE_INTERVAL = 10  # Seconds between market price updates
+MARKET_PRICE_ADJUSTMENT_FACTOR = 0.05  # Maximum percentage change in price per update
+MARKET_MAX_PRICE_MULTIPLIER = 2.5  # Maximum multiplier from base price
+MARKET_MIN_PRICE_MULTIPLIER = 0.4  # Minimum multiplier from base price (lower for more volatility)
+
 # Debug settings
 DEBUG_LOGGER = False  # Whether to show the in-game log UI
-LOGGER_SHOW_PLAYER = False  # Whether to show player-related logs (PLAYER source)
+LOGGER_SHOW_PLAYER = True  # Whether to show player-related logs (PLAYER source)
 LOGGER_SHOW_AI = True      # Whether to show AI-related logs (AI-x source)
-LOGGER_SHOW_BUILDING = False  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)
+LOGGER_SHOW_BUILDING = True  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)

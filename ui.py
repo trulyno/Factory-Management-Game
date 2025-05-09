@@ -1,5 +1,6 @@
 import pygame
 from config import *
+from economy import PriceManager
 
 class UI:
     def __init__(self, screen_width, screen_height):
@@ -147,13 +148,34 @@ class UI:
                         (self.ui_panel_rect.x + 10, y), 
                         self.font_small)
             y += 20
-            
             # Resource info
             resource = "Unknown" if not tile.surveyed else tile.resource_type
             self.draw_text(surface, f"Resource: {resource}", 
                         (self.ui_panel_rect.x + 10, y), 
                         self.font_small)
             y += 20
+            
+            # Resource durability info (only show if it's a resource tile and it's surveyed or owned)
+            if tile.surveyed or tile.owner:
+                if tile.resource_type != 'EMPTY' and hasattr(tile, 'durability'):
+                    self.draw_text(surface, f"Durability: {tile.durability}", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small)
+                    y += 20
+            
+            # Tile price info (display different price if surveyed)
+            if tile.owner is None:  # Only show price for tiles that can be bought
+                base_price = tile.price
+                if tile.surveyed:
+                    current_price = tile.get_tile_cost()
+                    self.draw_text(surface, f"Price: ${current_price} (Surveyed: -30%)", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small, GREEN if tile.surveyed else WHITE)
+                else:
+                    self.draw_text(surface, f"Price: ${base_price}", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small)
+                y += 20
             
             # Building info
             building = tile.building if tile.building else "None"
@@ -180,7 +202,7 @@ class UI:
                 y += 35
             
             # Survey tile button
-            if not tile.surveyed and tile.owner is None and player.can_afford(SURVEY_COST):
+            if not tile.surveyed and tile.owner is None and player.can_afford(PriceManager.instance.get_survey_cost()):
                 survey_rect = pygame.Rect(
                     self.ui_panel_rect.x + 10, y,
                     UI_PANEL_WIDTH - 20, 30
@@ -188,10 +210,46 @@ class UI:
                 self.action_buttons['survey'] = survey_rect
                 pygame.draw.rect(surface, LIGHT_GRAY, survey_rect)
                 pygame.draw.rect(surface, BLACK, survey_rect, 1)
-                self.draw_text(surface, f"Survey Tile (${SURVEY_COST})", 
+                self.draw_text(surface, f"Survey Tile (${PriceManager.instance.get_survey_cost()}) - 30% discount on buy", 
                             (survey_rect.x + 10, survey_rect.y + 5), 
                             self.font_small)
                 y += 35
+        
+        # Price multipliers section
+        if PriceManager.instance:
+            self.draw_text(surface, "Economy Status:", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font)
+            y += 25
+            
+            # Show current price multipliers
+            survey_mult = PriceManager.instance.survey_cost_multiplier
+            tile_mult = PriceManager.instance.tile_cost_multiplier
+            building_mult = PriceManager.instance.building_cost_multiplier
+            
+            # Color-code based on multiplier level
+            def get_multiplier_color(mult):
+                if mult < 1.5:
+                    return GREEN  # Good
+                elif mult < 3.0:
+                    return YELLOW  # Warning
+                else:
+                    return RED  # Danger
+            
+            self.draw_text(surface, f"Survey costs: {survey_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(survey_mult))
+            y += 20
+            
+            self.draw_text(surface, f"Tile costs: {tile_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(tile_mult))
+            y += 20
+            
+            self.draw_text(surface, f"Building costs: {building_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(building_mult))
+            y += 35
         
         # Market prices
         y = self.height - 200
@@ -293,7 +351,7 @@ class UI:
         x = self.ui_panel_rect.x + 10
         y = self.height - 300
         width = UI_PANEL_WIDTH - 20
-        height = 200
+        height = 250  # Increased height to accommodate two-line display for each resource
         
         self.building_menu_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(surface, GRAY, self.building_menu_rect)
@@ -320,33 +378,33 @@ class UI:
             resources = tile.building_instance.resources
             
         for resource, amount in resources.items():
-            # Resource name and amount
-            self.draw_text(surface, f"{resource}: {amount}", (x + 10, y), self.font)
+            # Get current market price for this resource
+            price = market.prices.get(resource, 0)
             
-            # Sell all button
-            sell_all_rect = pygame.Rect(x + width - 150, y, 60, 20)
-            pygame.draw.rect(surface, WHITE, sell_all_rect)
-            pygame.draw.rect(surface, BLACK, sell_all_rect, 1)
-            self.draw_text(surface, "Sell All", (sell_all_rect.x + 5, sell_all_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'sell_all_{resource}'] = (sell_all_rect, resource)
+            # LINE 1: Resource name and potential earnings
+            resource_display = f"{resource}: {amount}"
+            self.draw_text(surface, resource_display, (x + 10, y), self.font)
             
-            # Amount input
-            input_rect = pygame.Rect(x + width - 80, y, 30, 20)
-            pygame.draw.rect(surface, WHITE, input_rect)
-            pygame.draw.rect(surface, BLACK, input_rect, 1)
-            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource:
-                self.draw_text(surface, self.sell_amount_input, (input_rect.x + 5, input_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'input_{resource}'] = (input_rect, resource)
+            # Calculate earnings based on sell amount input or total amount
+            calculated_amount = amount
+            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource and self.sell_amount_input:
+                try:
+                    input_amount = int(self.sell_amount_input)
+                    if 0 < input_amount <= amount:
+                        calculated_amount = input_amount
+                except ValueError:
+                    pass
+                    
+            earnings = calculated_amount * price
+            earnings_text = f"Value: ${earnings:.2f}"
+            self.draw_text(surface, earnings_text, (x + width - 120, y), self.font_small, GREEN)
             
-            # Sell amount button
-            sell_amt_rect = pygame.Rect(x + width - 45, y, 35, 20)
-            pygame.draw.rect(surface, WHITE, sell_amt_rect)
-            pygame.draw.rect(surface, BLACK, sell_amt_rect, 1)
-            self.draw_text(surface, "Sell", (sell_amt_rect.x + 5, sell_amt_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'sell_amt_{resource}'] = (sell_amt_rect, resource)
+            y += 25  # Move to line 2 for this resource
+            
+            # LINE 2: Interactive controls
             
             # Autosell checkbox
-            check_rect = pygame.Rect(x + width - 190, y, 20, 20)
+            check_rect = pygame.Rect(x + 10, y, 20, 20)
             pygame.draw.rect(surface, WHITE, check_rect)
             pygame.draw.rect(surface, BLACK, check_rect, 1)
             
@@ -362,7 +420,32 @@ class UI:
                                (check_rect.x + 17, check_rect.y + 3), 2)
             self.menu_buttons[f'autosell_{resource}'] = (check_rect, resource)
             
-            y += 25
+            # Auto-sell label
+            self.draw_text(surface, "Auto", (check_rect.x + 25, check_rect.y + 2), self.font_small)
+            
+            # Sell all button
+            sell_all_rect = pygame.Rect(x + 70, y, 60, 20)
+            pygame.draw.rect(surface, WHITE, sell_all_rect)
+            pygame.draw.rect(surface, BLACK, sell_all_rect, 1)
+            self.draw_text(surface, "Sell All", (sell_all_rect.x + 5, sell_all_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'sell_all_{resource}'] = (sell_all_rect, resource)
+            
+            # Amount input
+            input_rect = pygame.Rect(x + 140, y, 40, 20)
+            pygame.draw.rect(surface, WHITE, input_rect)
+            pygame.draw.rect(surface, BLACK, input_rect, 1)
+            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource:
+                self.draw_text(surface, self.sell_amount_input, (input_rect.x + 5, input_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'input_{resource}'] = (input_rect, resource)
+            
+            # Sell amount button
+            sell_amt_rect = pygame.Rect(x + 190, y, 40, 20)
+            pygame.draw.rect(surface, WHITE, sell_amt_rect)
+            pygame.draw.rect(surface, BLACK, sell_amt_rect, 1)
+            self.draw_text(surface, "Sell", (sell_amt_rect.x + 5, sell_amt_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'sell_amt_{resource}'] = (sell_amt_rect, resource)
+            
+            y += 30  # Extra spacing between resources
 
     def draw_processing_menu(self, surface, tile):
         """Draw menu for processing buildings"""
@@ -796,12 +879,12 @@ class UI:
         if self.building_menu_rect and self.building_menu_rect.collidepoint(pos):
             for button_id, (rect, data) in self.menu_buttons.items():
                 if rect.collidepoint(pos):
-                    if button_id.startswith('deposit_'):
+                    if button_id.startswith('deposit_'):                        
                         # Set collection station target
                         if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
                             self.selected_tile.building_instance.target_deposit = data
                     elif button_id.startswith('sell_all_'):
-                        # Sell all of a resource
+                        # Sell all of a resource and completely remove it from deposit
                         resource = data
                         amount = 0
                         # Get resources from building object
@@ -811,8 +894,12 @@ class UI:
                         if amount > 0:
                             price = Game.instance.market.prices[resource]
                             if player.sell_resources(self.selected_tile.building_instance, resource, amount, price):
+                                # Completely remove the resource from the dictionary to free up slot
+                                if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
+                                    if resource in self.selected_tile.building_instance.resources:
+                                        del self.selected_tile.building_instance.resources[resource]
                                 Game.instance.logger.log('PLAYER', 'SELL', 
-                                    f'Sold {amount} {resource} for ${amount * price}')
+                                    f'Sold all {amount} {resource} for ${amount * price} and removed from deposit')
                     elif button_id.startswith('input_'):
                         # Activate input for sell amount
                         self.input_active = True
@@ -861,15 +948,20 @@ class UI:
                     elif button_id == 'select_recipe':
                         # Select the currently displayed recipe
                         if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
-                            # Only change recipe if not currently processing
-                            if self.selected_tile.building_instance.processing_state == "idle":
+                            building_instance = self.selected_tile.building_instance
+                            # Can change recipe if either:
+                            # 1. The building is in idle state
+                            # 2. The building is inactive (regardless of state)
+                            if building_instance.selected_recipe is not None and hasattr(self.selected_tile.building_instance, 'is_inactive') and self.selected_tile.building_instance.is_inactive:
+                                building_instance.selected_recipe = None
+                            elif building_instance.processing_state == "idle" or building_instance.is_inactive:
                                 recipe_name = data
-                                self.selected_tile.building_instance.selected_recipe = recipe_name
+                                building_instance.selected_recipe = recipe_name
                                 Game.instance.logger.log('PROCESSING', 'SELECT', 
                                     f'Selected recipe {recipe_name} at ({self.selected_tile.x}, {self.selected_tile.y})')
                             else:
                                 Game.instance.logger.log('PROCESSING', 'ERROR', 
-                                    f'Cannot change recipe while processing at ({self.selected_tile.x}, {self.selected_tile.y})')
+                                    f'Cannot change recipe while active and processing. Set to inactive first at ({self.selected_tile.x}, {self.selected_tile.y})')
                     # Commerce station buttons
                     elif button_id == 'resource_prev':
                         # Select previous resource for commerce

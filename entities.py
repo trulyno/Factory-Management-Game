@@ -30,7 +30,7 @@ class Building:
         self.output_transport_time = 0
         self.resource_source = None  # Source deposit for input resources
         self.output_target = None  # Target deposit for output
-        self.is_inactive = False  # Whether the processing building is active
+        self.is_inactive = True  # Whether the processing building is inactive (default to inactive)
         
         # Commerce building attributes
         self.commerce_resource = None  # Resource type being traded
@@ -44,9 +44,7 @@ class Building:
         if self.type == 'COLLECTION':
             self.update_collection(dt)
         elif self.type == 'PROCESSING':
-            # Skip processing update if inactive
-            if not self.is_inactive:
-                self.update_processing(dt)
+            self.update_processing(dt)
         elif self.type == 'DEPOSIT':
             self.update_deposit(dt)
         elif self.type == 'COMMERCE':
@@ -79,13 +77,13 @@ class Building:
                                     self.last_error_log_time = current_time
                                 break
             return
-
+        
         # Check if target deposit exists and has space
         if not self.target_deposit or self.get_deposit_building(self.target_deposit).get_total_resources() >= DEPOSIT_SIZE:
             previous_target = self.target_deposit
             self.deposit_find_cooldown -= dt
             if self.deposit_find_cooldown <= 0:
-                self.target_deposit = self.find_closest_deposit()
+                self.target_deposit = self.find_best_deposit()
                 self.deposit_find_cooldown = self.deposit_find_interval
                 if not self.target_deposit and previous_target and ai_id:
                     # Log issue with deposit being full
@@ -119,13 +117,38 @@ class Building:
                                         ai.logger.log('COLLECTOR', 'TRANSFER', f"Delivered {amount} {resource} to deposit")
                                         break
         else:
+            
             # Check collection timing
             self.collection_time -= dt
             if self.collection_time <= 0:
-                if self.tile.resource_type != 'EMPTY':
+                if self.tile.resource_type != 'EMPTY' and self.tile.durability > 0:
                     # Collect new resource
                     self.resources[self.tile.resource_type] = self.resources.get(self.tile.resource_type, 0) + 1
                     self.collection_time = COLLECTION_DURATION
+                    
+                    # Decrease durability and check if depleted
+                    self.tile.durability -= 1
+                    if self.tile.durability <= 0:
+                        # Resource is depleted, convert to empty tile
+                        resource_type = self.tile.resource_type
+                        self.tile.resource_type = 'EMPTY'
+                        
+                        # Remove the collection building when resource is depleted
+                        self.tile.building = None
+                        self.tile.building_instance = None
+                        
+                        # Log resource depletion
+                        from game import Game
+                        if Game.instance:
+                            Game.instance.logger.log('COLLECTOR', 'DEPLETED', f"{resource_type} depleted at ({self.tile.x}, {self.tile.y})")
+                        # If there was an AI owner, notify the AI
+                        if ai_id:
+                            if Game.instance and hasattr(Game.instance, 'ai_factories'):
+                                for ai in Game.instance.ai_factories:
+                                    if str(ai.id) == ai_id:
+                                        ai.logger.log('COLLECTOR', 'DEPLETED', f"{resource_type} depleted at ({self.tile.x}, {self.tile.y})")
+                                        break
+                        return
                     
                     if ai_id:
                         # Log successful collection
@@ -133,7 +156,8 @@ class Building:
                         if Game.instance and hasattr(Game.instance, 'ai_factories'):
                             for ai in Game.instance.ai_factories:
                                 if str(ai.id) == ai_id:
-                                    ai.logger.log('COLLECTOR', 'GATHER', f"Collected 1 {self.tile.resource_type}")
+                                    ai.logger.log('COLLECTOR', 'GATHER', 
+                                                 f"Collected 1 {self.tile.resource_type} (Remaining: {self.tile.durability})")
                                     break
                     
                     # Start transport
@@ -143,12 +167,34 @@ class Building:
                         target_tile = self.target_deposit.tile
                     distance = self.get_distance_to(target_tile)
                     self.transport_time = distance * TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE
-    
+                    
     def update_processing(self, dt):
         """Handle processing building functionality"""
         from config import RECIPES, TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE, DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
         from game import Game
+        import pygame
         
+        # Check if the station just became inactive while in the middle of a process
+        # This should void any in-progress recipe
+        if self.is_inactive and self.processing_state != "idle":
+            # If we were in the middle of processing something, reset and void the recipe
+            if self.processing_state == "processing":
+                # Log the voided process
+                if Game.instance:
+                    current_time = pygame.time.get_ticks() / 1000.0
+                    if current_time - self.last_error_log_time >= self.error_log_cooldown:
+                        Game.instance.logger.log('PROCESSING', 'VOID', 
+                                              f"Process voided due to deactivation: {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
+                        self.last_error_log_time = current_time
+            
+            # Reset to idle state and clear all processing data
+            self.processing_state = "idle"
+            self.resource_sources = {}
+            self.input_transport_times = {}
+            self.output_target = None
+            self.processing_progress = 0
+            return
+            
         # Skip processing if inactive
         if self.is_inactive:
             return
@@ -440,10 +486,8 @@ class Building:
         return closest
     
     def find_closest_deposit_with_space(self):
-        """Find the closest deposit with available space"""
+        """Find the closest deposit with available space, using improved logic"""
         from config import DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
-        closest = None
-        min_distance = float('inf')
         
         # The resource type we're looking to store (for processing buildings)
         output_resource = None
@@ -452,26 +496,65 @@ class Building:
             if self.selected_recipe in RECIPES:
                 output_resource = RECIPES[self.selected_recipe]['output']
         
-        for pos, tile in self.tile.world.tiles.items():
-            if (tile.owner == self.tile.owner and 
-                tile.building == 'DEPOSIT' and
-                tile.building_instance and
-                tile.building_instance.get_total_resources() < DEPOSIT_SIZE):
-                
-                # Check if the deposit can accept a new resource type, if applicable
-                can_accept = True
-                if output_resource:
-                    # If the deposit doesn't already have this resource and is at the type limit, skip it
-                    if (output_resource not in tile.building_instance.resources and
-                        len(tile.building_instance.resources.keys()) >= MAX_RESOURCE_TYPES_PER_DEPOSIT):
-                        can_accept = False
-                
-                if can_accept:
+        # If we don't know what resource type we're looking for, fall back to finding any deposit with space
+        if not output_resource:
+            closest = None
+            min_distance = float('inf')
+            
+            for pos, tile in self.tile.world.tiles.items():
+                if (tile.owner == self.tile.owner and 
+                    tile.building == 'DEPOSIT' and
+                    tile.building_instance and
+                    tile.building_instance.get_total_resources() < DEPOSIT_SIZE):
+                    
                     distance = self.get_distance_to(tile)
                     if distance < min_distance:
                         min_distance = distance
                         closest = tile.building_instance
-        return closest
+            return closest
+        
+        # Step 1: Find deposits that already have this resource and aren't full
+        deposit_with_resource = None
+        min_distance_with_resource = float('inf')
+        
+        # Step 2: Find deposits that have space for this resource
+        closest_with_space = None
+        min_distance_with_space = float('inf')
+        
+        for pos, tile in self.tile.world.tiles.items():
+            if (tile.owner == self.tile.owner and 
+                tile.building == 'DEPOSIT' and 
+                tile.building_instance):
+                
+                deposit = tile.building_instance
+                distance = self.get_distance_to(tile)
+                total_resources = deposit.get_total_resources()
+                
+                # Check if this deposit has our resource type
+                has_resource = output_resource in deposit.resources
+                
+                # Check if the deposit has space for more resources in total
+                has_total_space = total_resources < DEPOSIT_SIZE
+                
+                # Check if the deposit can accept a new resource type
+                can_accept_new_type = len(deposit.resources.keys()) < MAX_RESOURCE_TYPES_PER_DEPOSIT
+                
+                # Step 1: Deposit has this resource and isn't full
+                if has_resource and has_total_space and distance < min_distance_with_resource:
+                    deposit_with_resource = deposit
+                    min_distance_with_resource = distance
+                
+                # Step 2: Deposit has space for a new resource type
+                if has_total_space and (has_resource or can_accept_new_type) and distance < min_distance_with_space:
+                    closest_with_space = deposit
+                    min_distance_with_space = distance
+        
+        # Prioritize deposit that already has this resource
+        if deposit_with_resource:
+            return deposit_with_resource
+        
+        # Otherwise use closest deposit with space
+        return closest_with_space
     
     def has_resource_in_deposit(self, deposit, resource_type, amount=1):
         """Check if a deposit has enough of the specified resource"""
@@ -769,3 +852,62 @@ class Building:
             return False
             
         return False
+
+    def find_best_deposit(self):
+        """Find the best deposit based on the improved logic:
+        1. If resource exists in deposit and not full, send to that deposit
+        2. If resource exists but deposit full, send to nearest deposit with space
+        3. If resource doesn't exist in any deposit, send to closest deposit with free space
+        4. If all deposits are full and/or have filled resource types, don't send the resource
+        """
+        from config import DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
+        
+        resource_type = self.tile.resource_type if hasattr(self, 'tile') and hasattr(self.tile, 'resource_type') else None
+        
+        # If we don't know what resource type we're looking for, fall back to old method
+        if not resource_type:
+            return self.find_closest_deposit()
+            
+        # Step 1: Find deposits that already have this resource and aren't full
+        deposit_with_resource = None
+        min_distance_with_resource = float('inf')
+        
+        # Step 2 & 3: Find deposits that have space (either for new resource type or for more of existing)
+        closest_with_space = None
+        min_distance_with_space = float('inf')
+        
+        for pos, tile in self.tile.world.tiles.items():
+            if (tile.owner == self.tile.owner and 
+                tile.building == 'DEPOSIT' and 
+                hasattr(tile, 'building_instance') and 
+                tile.building_instance):
+                
+                deposit = tile.building_instance
+                distance = self.get_distance_to(tile)
+                total_resources = deposit.get_total_resources()
+                
+                # Check if this deposit has our resource type
+                has_resource = resource_type in deposit.resources
+                
+                # Check if the deposit has space for more resources in total
+                has_total_space = total_resources < DEPOSIT_SIZE
+                
+                # Check if the deposit can accept a new resource type
+                can_accept_new_type = len(deposit.resources.keys()) < MAX_RESOURCE_TYPES_PER_DEPOSIT
+                
+                # Step 1: Deposit has this resource and isn't full
+                if has_resource and has_total_space and distance < min_distance_with_resource:
+                    deposit_with_resource = tile
+                    min_distance_with_resource = distance
+                
+                # Step 2 & 3: Deposit has space (either already has resource, or has space for new type)
+                if has_total_space and (has_resource or can_accept_new_type) and distance < min_distance_with_space:
+                    closest_with_space = tile
+                    min_distance_with_space = distance
+        
+        # Prioritize deposit that already has this resource
+        if deposit_with_resource:
+            return deposit_with_resource
+        
+        # Otherwise use closest deposit with space
+        return closest_with_space

@@ -12,6 +12,12 @@ class GameLogger:
         self.max_messages = 10
         # Building log sources - these are considered building logs
         self.building_sources = ['DEPOSIT', 'PROCESSING', 'COLLECTION', 'COMMERCE', 'CENTRAL', 'COLLECTOR']    
+        # For session saving
+        self.session_saver = None
+        
+    def set_session_saver(self, saver):
+        """Set the session saver reference"""
+        self.session_saver = saver
         
     def log(self, source, action_type, description):
         """Add a log message"""
@@ -24,6 +30,9 @@ class GameLogger:
             (category == 'building' and LOGGER_SHOW_BUILDING):
             print(message)  # Console output
         
+        # Store log in session saver if available
+        if self.session_saver:
+            self.session_saver.capture_log(source, action_type, description, category)
         
         log_entry = {'message': message, 'source': source, 'category': category}
         self.messages.append(log_entry)

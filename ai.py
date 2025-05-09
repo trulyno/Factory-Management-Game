@@ -2,7 +2,8 @@ import random
 import time
 from config import *
 import utils
-from logger import GameLogger  # Import logger directly instead of from Game
+from logger import GameLogger
+from economy import PriceManager
 
 class AIFactory:
     def __init__(self, factory_id, world):
@@ -240,7 +241,9 @@ class AIFactory:
         
     def try_buy_tile(self):
         """Try to buy an adjacent tile, returns True if successful"""
-        if self.money < TILE_BASE_COST:
+        # We now use a higher threshold since tile prices have increased
+        min_tile_cost_threshold = TILE_BASE_COST * 1.5  # Set minimum money threshold higher
+        if self.money < min_tile_cost_threshold:
             return False
             
         # Find adjacent tiles that can be bought
@@ -414,7 +417,9 @@ class AIFactory:
     
     def try_survey_tile(self):
         """Try to survey a tile to find resources, returns True if successful"""
-        if self.money < SURVEY_COST:
+        # Get current survey cost from global config (updated by PriceManager)
+        
+        if self.money < PriceManager.instance.get_survey_cost():
             return False
             
         # Find adjacent tiles that can be surveyed
@@ -428,8 +433,16 @@ class AIFactory:
         
         if potential_tiles:
             pos = random.choice(potential_tiles)
-            self.money -= SURVEY_COST
+            self.money -= PriceManager.instance.get_survey_cost()
             self.surveyed_tiles.add(pos)  # Track surveyed tiles
+            
+            # Also mark the tile as surveyed so it's visible to the player
+            tile = self.world.tiles[pos]
+            tile.surveyed = True
+            
+            # Log with current cost
+            self.log(f"Decision: Survey tile at ({tile.x}, {tile.y}) for ${PriceManager.instance.get_survey_cost()}")
+            
             self.log(f"Decision: Survey tile at {pos}")
             return True
         
@@ -473,9 +486,14 @@ class AIFactory:
         
         # Process each building
         for tile in processing_buildings:
-            # Skip if already has a recipe selected and is working
-            if (tile.building_instance.selected_recipe and 
-                tile.building_instance.processing_state != 'idle'):
+            # Evaluate the recipe if:
+            # 1. Building is inactive (can always change recipe when inactive)
+            # 2. Has no recipe selected
+            # 3. Has a recipe but isn't currently processing (idle state)
+            
+            if not (tile.building_instance.is_inactive or 
+                   not tile.building_instance.selected_recipe or
+                   tile.building_instance.processing_state == 'idle'):
                 continue
             
             # Pick the best recipe based on available resources
@@ -514,10 +532,15 @@ class AIFactory:
                 tile.building_instance.selected_recipe = best_recipe
                 self.log(f"Decision: Set processing building at ({tile.x}, {tile.y}) to recipe {best_recipe}")
                 
-                # Make sure the building is active
+                # Make sure the building is active after setting a recipe
                 tile.building_instance.is_inactive = False
+                self.log(f"Decision: Activated processing building at ({tile.x}, {tile.y})")
             else:
                 self.log(f"Decision: No suitable recipe found for processing building at ({tile.x}, {tile.y})")
+                
+                # Set to inactive if no recipe is found
+                tile.building_instance.is_inactive = True
+                self.log(f"Decision: Deactivated processing building at ({tile.x}, {tile.y}) due to no suitable recipe")
                 
     def _manage_commerce_buildings(self):
         """Configure and manage commerce buildings"""

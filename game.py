@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 from config import *
 from world import World
 from player import Player
@@ -8,6 +9,7 @@ from ai import AIFactory
 from ui import UI
 from logger import GameLogger
 from stats import GameStats
+from session_saver import SessionSaver
 
 class Camera:
     def __init__(self, width, height, world_width, world_height):
@@ -144,9 +146,11 @@ class Game:
         
         # Game objects
         from config import WORLD_SIZE, NUM_AI_PLAYERS
+        from economy import PriceManager, Market
         self.world = World()  # World now uses WORLD_SIZE from config
         self.player = Player()
         self.market = Market()
+        self.price_manager = PriceManager()  # Initialize the price manager
         self.logger = GameLogger()
         self.stats = GameStats()  # Initialize stats tracker
         
@@ -170,6 +174,10 @@ class Game:
         # Game state
         self.game_over = False
         self.time_since_update = 0
+        
+        # Create session saver and connect it to logger
+        self.session_saver = SessionSaver(self)
+        self.logger.set_session_saver(self.session_saver)
         
     def handle_events(self):
         """Process game events"""
@@ -245,25 +253,52 @@ class Game:
         if self.game_over:
             return
             
+        # Update price manager continuously
+        self.price_manager.update(dt)
+            
         # Update market prices periodically
         self.time_since_update += dt
-        if self.time_since_update >= 1.0:  # Every second
+        if self.time_since_update >= MARKET_UPDATE_INTERVAL:
             self.time_since_update = 0
             self.market.update_prices()
+            
+            # Occasionally create market shocks (1% chance per update)
+            if random.random() < 0.01:
+                affected_resources = self.market.create_market_shock()
+                # Log the market shock event if logger is available
+                if hasattr(self, 'logger'):
+                    resources_str = ', '.join(affected_resources)
+                    self.logger.log("MARKET", "SHOCK", f"Market shock affecting: {resources_str}")
             
             # Update AI factories
             for ai in self.ai_factories:
                 ai.update()
+                
+            # Update session saver to record market data
+            if hasattr(self, 'session_saver'):
+                self.session_saver.update(dt)
         
         # Update world (includes buildings)
-        self.world.update(dt)
-        
-        # Check win condition
+        self.world.update(dt)        # Check win condition
         if self.player.money >= WIN_CONDITION:
             self.game_over = True
             # Stop the timer when the game ends
             self.stats.stop_timer()
-            self.logger.log('GAME', 'WIN', "You've reached the goal of $1,000,000!")
+            
+            # Log win message with time
+            time_played_str = self.stats.format_time(self.stats.time_played)
+            win_message = f"You've reached the goal of $1,000,000! Time: {time_played_str}"
+            
+            # Check if this is a new personal best
+            if self.stats.is_personal_best():
+                win_message += " (New Personal Best!)"
+                self.logger.log('GAME', 'WIN', win_message)
+            else:
+                self.logger.log('GAME', 'WIN', win_message)
+            
+            # Save session data when game ends
+            if hasattr(self, 'session_saver'):
+                self.session_saver.save_session()
     
     def draw(self):
         """Render the game"""
@@ -327,12 +362,16 @@ class Game:
             text_win = font_large.render("You Win!", True, GREEN)
             text_rect_win = text_win.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//4))
             self.screen.blit(text_win, text_rect_win)
-            
-            # Draw stats
+              # Draw stats
             font_stats = pygame.font.SysFont('Arial', 24)
             stats_list = self.stats.get_stats_display()
             for i, stat_text in enumerate(stats_list):
-                text_surface = font_stats.render(stat_text, True, WHITE)
+                # Highlight new personal best with gold color
+                text_color = WHITE
+                if "New Record" in stat_text:
+                    text_color = (255, 215, 0)  # Gold color for new record
+                
+                text_surface = font_stats.render(stat_text, True, text_color)
                 text_rect = text_surface.get_rect(
                     center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//4 + 80 + i * 40)
                 )
@@ -390,5 +429,9 @@ class Game:
                     # User quit during configuration
                     self.running = False
         
+        # Save session data if the game is over
+        if hasattr(self, 'session_saver') and self.game_over:
+            self.session_saver.save_session()
+            
         pygame.quit()
         sys.exit()
