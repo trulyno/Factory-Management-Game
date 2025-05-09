@@ -79,13 +79,13 @@ class Building:
                                     self.last_error_log_time = current_time
                                 break
             return
-
+        
         # Check if target deposit exists and has space
         if not self.target_deposit or self.get_deposit_building(self.target_deposit).get_total_resources() >= DEPOSIT_SIZE:
             previous_target = self.target_deposit
             self.deposit_find_cooldown -= dt
             if self.deposit_find_cooldown <= 0:
-                self.target_deposit = self.find_closest_deposit()
+                self.target_deposit = self.find_best_deposit()
                 self.deposit_find_cooldown = self.deposit_find_interval
                 if not self.target_deposit and previous_target and ai_id:
                     # Log issue with deposit being full
@@ -466,10 +466,8 @@ class Building:
         return closest
     
     def find_closest_deposit_with_space(self):
-        """Find the closest deposit with available space"""
+        """Find the closest deposit with available space, using improved logic"""
         from config import DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
-        closest = None
-        min_distance = float('inf')
         
         # The resource type we're looking to store (for processing buildings)
         output_resource = None
@@ -478,26 +476,65 @@ class Building:
             if self.selected_recipe in RECIPES:
                 output_resource = RECIPES[self.selected_recipe]['output']
         
-        for pos, tile in self.tile.world.tiles.items():
-            if (tile.owner == self.tile.owner and 
-                tile.building == 'DEPOSIT' and
-                tile.building_instance and
-                tile.building_instance.get_total_resources() < DEPOSIT_SIZE):
-                
-                # Check if the deposit can accept a new resource type, if applicable
-                can_accept = True
-                if output_resource:
-                    # If the deposit doesn't already have this resource and is at the type limit, skip it
-                    if (output_resource not in tile.building_instance.resources and
-                        len(tile.building_instance.resources.keys()) >= MAX_RESOURCE_TYPES_PER_DEPOSIT):
-                        can_accept = False
-                
-                if can_accept:
+        # If we don't know what resource type we're looking for, fall back to finding any deposit with space
+        if not output_resource:
+            closest = None
+            min_distance = float('inf')
+            
+            for pos, tile in self.tile.world.tiles.items():
+                if (tile.owner == self.tile.owner and 
+                    tile.building == 'DEPOSIT' and
+                    tile.building_instance and
+                    tile.building_instance.get_total_resources() < DEPOSIT_SIZE):
+                    
                     distance = self.get_distance_to(tile)
                     if distance < min_distance:
                         min_distance = distance
                         closest = tile.building_instance
-        return closest
+            return closest
+        
+        # Step 1: Find deposits that already have this resource and aren't full
+        deposit_with_resource = None
+        min_distance_with_resource = float('inf')
+        
+        # Step 2: Find deposits that have space for this resource
+        closest_with_space = None
+        min_distance_with_space = float('inf')
+        
+        for pos, tile in self.tile.world.tiles.items():
+            if (tile.owner == self.tile.owner and 
+                tile.building == 'DEPOSIT' and 
+                tile.building_instance):
+                
+                deposit = tile.building_instance
+                distance = self.get_distance_to(tile)
+                total_resources = deposit.get_total_resources()
+                
+                # Check if this deposit has our resource type
+                has_resource = output_resource in deposit.resources
+                
+                # Check if the deposit has space for more resources in total
+                has_total_space = total_resources < DEPOSIT_SIZE
+                
+                # Check if the deposit can accept a new resource type
+                can_accept_new_type = len(deposit.resources.keys()) < MAX_RESOURCE_TYPES_PER_DEPOSIT
+                
+                # Step 1: Deposit has this resource and isn't full
+                if has_resource and has_total_space and distance < min_distance_with_resource:
+                    deposit_with_resource = deposit
+                    min_distance_with_resource = distance
+                
+                # Step 2: Deposit has space for a new resource type
+                if has_total_space and (has_resource or can_accept_new_type) and distance < min_distance_with_space:
+                    closest_with_space = deposit
+                    min_distance_with_space = distance
+        
+        # Prioritize deposit that already has this resource
+        if deposit_with_resource:
+            return deposit_with_resource
+        
+        # Otherwise use closest deposit with space
+        return closest_with_space
     
     def has_resource_in_deposit(self, deposit, resource_type, amount=1):
         """Check if a deposit has enough of the specified resource"""
@@ -795,3 +832,62 @@ class Building:
             return False
             
         return False
+
+    def find_best_deposit(self):
+        """Find the best deposit based on the improved logic:
+        1. If resource exists in deposit and not full, send to that deposit
+        2. If resource exists but deposit full, send to nearest deposit with space
+        3. If resource doesn't exist in any deposit, send to closest deposit with free space
+        4. If all deposits are full and/or have filled resource types, don't send the resource
+        """
+        from config import DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
+        
+        resource_type = self.tile.resource_type if hasattr(self, 'tile') and hasattr(self.tile, 'resource_type') else None
+        
+        # If we don't know what resource type we're looking for, fall back to old method
+        if not resource_type:
+            return self.find_closest_deposit()
+            
+        # Step 1: Find deposits that already have this resource and aren't full
+        deposit_with_resource = None
+        min_distance_with_resource = float('inf')
+        
+        # Step 2 & 3: Find deposits that have space (either for new resource type or for more of existing)
+        closest_with_space = None
+        min_distance_with_space = float('inf')
+        
+        for pos, tile in self.tile.world.tiles.items():
+            if (tile.owner == self.tile.owner and 
+                tile.building == 'DEPOSIT' and 
+                hasattr(tile, 'building_instance') and 
+                tile.building_instance):
+                
+                deposit = tile.building_instance
+                distance = self.get_distance_to(tile)
+                total_resources = deposit.get_total_resources()
+                
+                # Check if this deposit has our resource type
+                has_resource = resource_type in deposit.resources
+                
+                # Check if the deposit has space for more resources in total
+                has_total_space = total_resources < DEPOSIT_SIZE
+                
+                # Check if the deposit can accept a new resource type
+                can_accept_new_type = len(deposit.resources.keys()) < MAX_RESOURCE_TYPES_PER_DEPOSIT
+                
+                # Step 1: Deposit has this resource and isn't full
+                if has_resource and has_total_space and distance < min_distance_with_resource:
+                    deposit_with_resource = tile
+                    min_distance_with_resource = distance
+                
+                # Step 2 & 3: Deposit has space (either already has resource, or has space for new type)
+                if has_total_space and (has_resource or can_accept_new_type) and distance < min_distance_with_space:
+                    closest_with_space = tile
+                    min_distance_with_space = distance
+        
+        # Prioritize deposit that already has this resource
+        if deposit_with_resource:
+            return deposit_with_resource
+        
+        # Otherwise use closest deposit with space
+        return closest_with_space
