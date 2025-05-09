@@ -64,7 +64,8 @@ PROCESSED_RESOURCES = {
     'COPPER_INGOT': {'from': 'COPPER_ORE', 'value': 60, 'time': 5, 'color': (184, 115, 51)},
     'GOLD_INGOT': {'from': 'GOLD_ORE', 'value': 100, 'time': 10, 'color': YELLOW},
     'BRICK': {'from': 'CLAY', 'value': 25, 'time': 3, 'color': RED},
-    'STEEL': {'from': 'IRON_INGOT', 'value': 100, 'time': 12, 'color': (100, 100, 120)}
+    'STEEL': {'from': 'IRON_INGOT', 'value': 100, 'time': 12, 'color': (100, 100, 120)},
+    'PLANK': {'from': 'WOOD', 'value': 20, 'time': 2, 'color': (139, 69, 19)},
 }
 
 # Processing recipes
@@ -103,6 +104,13 @@ RECIPES = {
         'output': 'STEEL',
         'duration': 12,
         'output_amount': 1
+    },
+    'PLANK': {
+        'input1': 'WOOD',
+        'input2': None,
+        'output': 'PLANK',
+        'duration': 3,
+        'output_amount': 2
     }
 }
 
@@ -121,7 +129,7 @@ INITIAL_TILES = 5
 WIN_CONDITION = 10000
 SURVEY_COST = 50
 TILE_BASE_COST = 100
-TILE_COST_MULTIPLIER = 0.8
+TILE_COST_MULTIPLIER = 0.9
 
 # Collection and Transport settings
 COLLECTION_DURATION = 5  # seconds between resource collection
