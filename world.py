@@ -272,6 +272,7 @@ class World:
             if pos in self.tiles:
                 self.tiles[pos].owner = 'player'
                 self.tiles[pos].surveyed = True
+                self.tiles[pos].resource_type = 'EMPTY'
                 tile_count += 1
                 break
         

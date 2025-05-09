@@ -28,10 +28,10 @@ WORLD_SIZE = WORLD_SIZE_MEDIUM  # Default world size
 
 # Resource rarity settings
 RESOURCE_RARITY = {
-    'COMMON': {'multiplier': 1.0, 'durability_range': (50, 80)},
-    'NORMAL': {'multiplier': 0.7, 'durability_range': (30, 50)},
-    'RARE': {'multiplier': 0.4, 'durability_range': (15, 30)},
-    'VERY_RARE': {'multiplier': 0.2, 'durability_range': (5, 15)}
+    'COMMON': {'multiplier': 1.0, 'durability_range': (80, 100)},
+    'NORMAL': {'multiplier': 0.7, 'durability_range': (50, 80)},
+    'RARE': {'multiplier': 0.4, 'durability_range': (30, 50)},
+    'VERY_RARE': {'multiplier': 0.2, 'durability_range': (10, 30)}
 }
 
 # Resource distribution (default rarity is NORMAL)
