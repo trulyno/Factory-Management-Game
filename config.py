@@ -131,17 +131,17 @@ WIN_CONDITION = 10000
 # Base pricing settings
 SURVEY_BASE_COST = 50
 TILE_BASE_COST = 100
-TILE_COST_MULTIPLIER = 0.9
+TILE_COST_MULTIPLIER = 0.8
 
 # Dynamic pricing configuration
 PRICE_UPDATE_INTERVAL = 60  # Seconds between price adjustments (more frequent updates)
-PRICE_INCREASE_RATE = 0.02  # Base percentage increase per update (smoother progression)
+PRICE_INCREASE_RATE = 0.005  # Base percentage increase per update (smoother progression)
 MAX_PRICE_MULTIPLIER = 5.0  # Maximum price multiplier from base price
-MIN_PRICE_MULTIPLIER = 0.8  # Minimum price multiplier (prevents prices getting too low)
-ECONOMY_SCALING_FACTOR = 0.00008  # How much total economy affects prices
-BUILDINGS_SCALING_FACTOR = 0.015  # How much total buildings affects prices
-TILES_SCALING_FACTOR = 0.008  # How much surveyed tiles affects prices
-TIME_SCALING_FACTOR = 0.002  # How much game time affects prices
+MIN_PRICE_MULTIPLIER = 0.5  # Minimum price multiplier (prevents prices getting too low)
+ECONOMY_SCALING_FACTOR = 0.00001  # How much total economy affects prices
+BUILDINGS_SCALING_FACTOR = 0.002  # How much total buildings affects prices
+TILES_SCALING_FACTOR = 0.001  # How much surveyed tiles affects prices
+TIME_SCALING_FACTOR = 0.0001  # How much game time affects prices
 DIFFICULTY_SCALING = {
     'EASY': 0.7,      # 70% of normal price increases
     'NORMAL': 1.0,    # Normal price increases
