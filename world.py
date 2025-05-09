@@ -15,6 +15,7 @@ class Tile:
         self.surveyed = False
         self.world = None  # Set by World class
         self.durability = 0  # Resource durability (how many times resources can be collected)
+        self.price = TILE_BASE_COST  # Default price, will be updated based on resource
     
     def update(self, dt):
         """Update tile state"""
@@ -118,7 +119,10 @@ class Tile:
     
     def get_tile_cost(self):
         """Calculate the cost to buy this tile"""
-        return TILE_BASE_COST
+        # If the tile has been surveyed, provide a discount
+        if self.surveyed:
+            return int(self.price * 0.7)  # 30% discount for surveyed tiles
+        return self.price
 
 class World:
     def __init__(self):
@@ -131,6 +135,7 @@ class World:
         
     def generate_world(self):
         """Generate the world with resources"""
+        # First pass: create tiles with resources
         for x in range(self.width):
             for y in range(self.height):
                 resource = utils.random_resource()
@@ -141,6 +146,79 @@ class World:
                 tile.durability = utils.get_resource_durability(resource)
                 
                 self.tiles[(x, y)] = tile
+        
+        # Second pass: set initial prices based on resource rarity
+        self.initialize_tile_prices()
+        
+        # Third pass: propagate prices to neighboring tiles
+        self.propagate_tile_prices()
+    
+    def initialize_tile_prices(self):
+        """Set initial tile prices based on resource rarity"""
+        from config import RESOURCE_DISTRIBUTION, RESOURCE_RARITY, TILE_BASE_COST
+        
+        for coords, tile in self.tiles.items():
+            resource = tile.resource_type
+            
+            # Base price starts at TILE_BASE_COST
+            base_price = TILE_BASE_COST
+            
+            # Adjust price based on resource rarity
+            if resource != 'EMPTY':
+                rarity = RESOURCE_DISTRIBUTION.get(resource, {}).get('rarity', 'NORMAL')
+                
+                # Price multipliers based on rarity
+                rarity_multipliers = {
+                    'COMMON': 1.5,  # 50% higher than base
+                    'NORMAL': 2.0,  # 100% higher than base
+                    'RARE': 3.0,    # 200% higher than base
+                    'VERY_RARE': 4.0 # 300% higher than base
+                }
+                
+                # Apply rarity multiplier
+                rarity_multiplier = rarity_multipliers.get(rarity, 1.0)
+                
+                # Add some randomness (±20% variation)
+                random_factor = 0.8 + (random.random() * 0.4)  # 0.8 to 1.2
+                
+                # Calculate final price
+                tile.price = int(base_price * rarity_multiplier * random_factor)
+            else:
+                # Empty tiles are cheaper
+                tile.price = int(base_price * 0.8)  # 20% cheaper than base
+    
+    def propagate_tile_prices(self):
+        """Propagate resource tile prices to neighboring tiles within 3 tiles distance"""
+        # Make a copy of current prices to avoid affecting the propagation during iteration
+        price_influences = {coords: 0 for coords in self.tiles.keys()}
+        
+        for (x, y), tile in self.tiles.items():
+            if tile.resource_type != 'EMPTY':
+                base_influence = tile.price - TILE_BASE_COST
+                if base_influence <= 0:
+                    continue
+                
+                # Propagate price influence to neighbors up to 3 tiles away
+                for distance in range(1, 4):  # 1, 2, 3 tiles distance
+                    influence_factor = 0.7 ** distance  # Decrease by distance (0.7, 0.49, 0.343)
+                    
+                    # Get all tiles at this distance
+                    for dx in range(-distance, distance + 1):
+                        for dy in range(-distance, distance + 1):
+                            # Only consider tiles exactly at 'distance' away (Manhattan distance)
+                            if abs(dx) + abs(dy) == distance:
+                                nx, ny = x + dx, y + dy
+                                if (nx, ny) in self.tiles:
+                                    # Apply influence with some randomness
+                                    random_factor = 0.7 + (random.random() * 0.6)  # 0.7 to 1.3
+                                    influence = int(base_influence * influence_factor * random_factor)
+                                    price_influences[(nx, ny)] += influence
+        
+        # Apply the calculated influences to all tiles
+        for coords, influence in price_influences.items():
+            tile = self.tiles[coords]
+            if influence > 0:
+                tile.price += influence
     
     def setup_player_start(self, player):
         """Set up the player's starting area"""

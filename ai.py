@@ -240,7 +240,9 @@ class AIFactory:
         
     def try_buy_tile(self):
         """Try to buy an adjacent tile, returns True if successful"""
-        if self.money < TILE_BASE_COST:
+        # We now use a higher threshold since tile prices have increased
+        min_tile_cost_threshold = TILE_BASE_COST * 1.5  # Set minimum money threshold higher
+        if self.money < min_tile_cost_threshold:
             return False
             
         # Find adjacent tiles that can be bought

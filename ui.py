@@ -162,6 +162,20 @@ class UI:
                                 self.font_small)
                     y += 20
             
+            # Tile price info (display different price if surveyed)
+            if tile.owner is None:  # Only show price for tiles that can be bought
+                base_price = tile.price
+                if tile.surveyed:
+                    current_price = tile.get_tile_cost()
+                    self.draw_text(surface, f"Price: ${current_price} (Surveyed: -30%)", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small, GREEN if tile.surveyed else WHITE)
+                else:
+                    self.draw_text(surface, f"Price: ${base_price}", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small)
+                y += 20
+            
             # Building info
             building = tile.building if tile.building else "None"
             self.draw_text(surface, f"Building: {building}", 
@@ -195,7 +209,7 @@ class UI:
                 self.action_buttons['survey'] = survey_rect
                 pygame.draw.rect(surface, LIGHT_GRAY, survey_rect)
                 pygame.draw.rect(surface, BLACK, survey_rect, 1)
-                self.draw_text(surface, f"Survey Tile (${SURVEY_COST})", 
+                self.draw_text(surface, f"Survey Tile (${SURVEY_COST}) - 30% discount on buy", 
                             (survey_rect.x + 10, survey_rect.y + 5), 
                             self.font_small)
                 y += 35
