@@ -145,8 +145,14 @@ AI_COMMERCE_THRESHOLD = 1500  # Money threshold before considering commerce buil
 AI_PROCESSING_THRESHOLD = 800  # Money threshold before considering processing buildings
 AI_EXPANSION_RATE = 0.7  # Higher values make AI more likely to expand territory
 
+# Market settings
+MARKET_UPDATE_INTERVAL = 10  # Seconds between market price updates
+MARKET_PRICE_ADJUSTMENT_FACTOR = 0.05  # Maximum percentage change in price per update
+MARKET_MAX_PRICE_MULTIPLIER = 2.0  # Maximum multiplier from base price
+MARKET_MIN_PRICE_MULTIPLIER = 0.5  # Minimum multiplier from base price
+
 # Debug settings
 DEBUG_LOGGER = False  # Whether to show the in-game log UI
 LOGGER_SHOW_PLAYER = True  # Whether to show player-related logs (PLAYER source)
 LOGGER_SHOW_AI = True      # Whether to show AI-related logs (AI-x source)
-LOGGER_SHOW_BUILDING = True  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)
+LOGGER_SHOW_BUILDING = False  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)

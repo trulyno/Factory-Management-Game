@@ -247,7 +247,7 @@ class Game:
             
         # Update market prices periodically
         self.time_since_update += dt
-        if self.time_since_update >= 1.0:  # Every second
+        if self.time_since_update >= MARKET_UPDATE_INTERVAL:
             self.time_since_update = 0
             self.market.update_prices()
             
