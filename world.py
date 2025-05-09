@@ -14,6 +14,7 @@ class Tile:
         self.building_instance = None
         self.surveyed = False
         self.world = None  # Set by World class
+        self.durability = 0  # Resource durability (how many times resources can be collected)
     
     def update(self, dt):
         """Update tile state"""
@@ -92,6 +93,17 @@ class Tile:
             resource_color = RESOURCE_TYPES[self.resource_type]['color']
             resource_rect = rect.inflate(-20, -20)
             pygame.draw.rect(surface, resource_color, resource_rect)
+            
+            # # Draw durability indicator if resource is not empty
+            # if self.durability > 0:
+            #     # Create a font for showing durability
+            #     font = pygame.font.SysFont(None, 20)
+            #     text = font.render(str(self.durability), True, WHITE)
+            #     text_rect = text.get_rect(center=(
+            #         rect.centerx - camera_offset[0],
+            #         rect.centery - camera_offset[1]
+            #     ))
+            #     surface.blit(text, text_rect)
         
         # Draw building if present
         if self.building:
@@ -124,6 +136,10 @@ class World:
                 resource = utils.random_resource()
                 tile = Tile(x, y, resource)
                 tile.world = self  # Set reference to world
+                
+                # Set durability based on resource rarity
+                tile.durability = utils.get_resource_durability(resource)
+                
                 self.tiles[(x, y)] = tile
     
     def setup_player_start(self, player):
@@ -139,7 +155,6 @@ class World:
         
         # Count initial tiles
         tile_count = 1
-        
         # Make sure at least one adjacent tile has a resource
         adjacents = utils.get_adjacent_coords(center_x, center_y)
         resource_placed = False
@@ -150,7 +165,9 @@ class World:
                 self.tiles[(x, y)].surveyed = True
                 tile_count += 1
                 if not resource_placed:
-                    self.tiles[(x, y)].resource_type = random.choice(['WOOD', 'STONE', 'IRON_ORE'])
+                    resource_type = random.choice(['WOOD', 'STONE', 'IRON_ORE'])
+                    self.tiles[(x, y)].resource_type = resource_type
+                    self.tiles[(x, y)].durability = utils.get_resource_durability(resource_type)
                     resource_placed = True
         
         # Set up the 5th tile
@@ -188,10 +205,21 @@ class World:
             self.tiles[(x, y)].surveyed = True
             
             # Add surrounding tiles
-            for adj_x, adj_y in utils.get_adjacent_coords(x, y):
+            # Ensure at least one resource for AI to start with
+            adjacents = utils.get_adjacent_coords(x, y)
+            resource_placed = False
+            
+            for adj_x, adj_y in adjacents:
                 if (adj_x, adj_y) in self.tiles:
                     self.tiles[(adj_x, adj_y)].owner = f'ai_{i}'
                     self.tiles[(adj_x, adj_y)].surveyed = True
+                    
+                    # Ensure AI has at least one resource to start with
+                    if not resource_placed:
+                        resource_type = random.choice(['WOOD', 'STONE', 'IRON_ORE'])
+                        self.tiles[(adj_x, adj_y)].resource_type = resource_type
+                        self.tiles[(adj_x, adj_y)].durability = utils.get_resource_durability(resource_type)
+                        resource_placed = True
     
     def can_buy_tile(self, x, y, owner):
         """Check if a tile can be bought by the owner"""

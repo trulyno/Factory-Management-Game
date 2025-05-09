@@ -147,13 +147,20 @@ class UI:
                         (self.ui_panel_rect.x + 10, y), 
                         self.font_small)
             y += 20
-            
             # Resource info
             resource = "Unknown" if not tile.surveyed else tile.resource_type
             self.draw_text(surface, f"Resource: {resource}", 
                         (self.ui_panel_rect.x + 10, y), 
                         self.font_small)
             y += 20
+            
+            # Resource durability info (only show if it's a resource tile and it's surveyed or owned)
+            if tile.surveyed or tile.owner:
+                if tile.resource_type != 'EMPTY' and hasattr(tile, 'durability'):
+                    self.draw_text(surface, f"Durability: {tile.durability}", 
+                                (self.ui_panel_rect.x + 10, y), 
+                                self.font_small)
+                    y += 20
             
             # Building info
             building = tile.building if tile.building else "None"

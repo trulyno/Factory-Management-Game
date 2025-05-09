@@ -119,13 +119,38 @@ class Building:
                                         ai.logger.log('COLLECTOR', 'TRANSFER', f"Delivered {amount} {resource} to deposit")
                                         break
         else:
+            
             # Check collection timing
             self.collection_time -= dt
             if self.collection_time <= 0:
-                if self.tile.resource_type != 'EMPTY':
+                if self.tile.resource_type != 'EMPTY' and self.tile.durability > 0:
                     # Collect new resource
                     self.resources[self.tile.resource_type] = self.resources.get(self.tile.resource_type, 0) + 1
                     self.collection_time = COLLECTION_DURATION
+                    
+                    # Decrease durability and check if depleted
+                    self.tile.durability -= 1
+                    if self.tile.durability <= 0:
+                        # Resource is depleted, convert to empty tile
+                        resource_type = self.tile.resource_type
+                        self.tile.resource_type = 'EMPTY'
+                        
+                        # Remove the collection building when resource is depleted
+                        self.tile.building = None
+                        self.tile.building_instance = None
+                        
+                        # Log resource depletion
+                        from game import Game
+                        if Game.instance:
+                            Game.instance.logger.log('COLLECTOR', 'DEPLETED', f"{resource_type} depleted at ({self.tile.x}, {self.tile.y})")
+                        # If there was an AI owner, notify the AI
+                        if ai_id:
+                            if Game.instance and hasattr(Game.instance, 'ai_factories'):
+                                for ai in Game.instance.ai_factories:
+                                    if str(ai.id) == ai_id:
+                                        ai.logger.log('COLLECTOR', 'DEPLETED', f"{resource_type} depleted at ({self.tile.x}, {self.tile.y})")
+                                        break
+                        return
                     
                     if ai_id:
                         # Log successful collection
@@ -133,7 +158,8 @@ class Building:
                         if Game.instance and hasattr(Game.instance, 'ai_factories'):
                             for ai in Game.instance.ai_factories:
                                 if str(ai.id) == ai_id:
-                                    ai.logger.log('COLLECTOR', 'GATHER', f"Collected 1 {self.tile.resource_type}")
+                                    ai.logger.log('COLLECTOR', 'GATHER', 
+                                                 f"Collected 1 {self.tile.resource_type} (Remaining: {self.tile.durability})")
                                     break
                     
                     # Start transport

@@ -28,10 +28,10 @@ WORLD_SIZE = WORLD_SIZE_MEDIUM  # Default world size
 
 # Resource rarity settings
 RESOURCE_RARITY = {
-    'COMMON': {'multiplier': 1.0},
-    'NORMAL': {'multiplier': 0.7},
-    'RARE': {'multiplier': 0.4},
-    'VERY_RARE': {'multiplier': 0.2}
+    'COMMON': {'multiplier': 1.0, 'durability_range': (50, 80)},
+    'NORMAL': {'multiplier': 0.7, 'durability_range': (30, 50)},
+    'RARE': {'multiplier': 0.4, 'durability_range': (15, 30)},
+    'VERY_RARE': {'multiplier': 0.2, 'durability_range': (5, 15)}
 }
 
 # Resource distribution (default rarity is NORMAL)
@@ -147,6 +147,6 @@ AI_EXPANSION_RATE = 0.7  # Higher values make AI more likely to expand territory
 
 # Debug settings
 DEBUG_LOGGER = False  # Whether to show the in-game log UI
-LOGGER_SHOW_PLAYER = False  # Whether to show player-related logs (PLAYER source)
+LOGGER_SHOW_PLAYER = True  # Whether to show player-related logs (PLAYER source)
 LOGGER_SHOW_AI = True      # Whether to show AI-related logs (AI-x source)
-LOGGER_SHOW_BUILDING = False  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)
+LOGGER_SHOW_BUILDING = True  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)

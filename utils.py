@@ -10,6 +10,17 @@ def get_adjacent_coords(x, y):
     """Return coordinates of adjacent tiles"""
     return [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
 
+def get_resource_durability(resource_type):
+    """Return a random durability value for the given resource type based on its rarity"""
+    from config import RESOURCE_DISTRIBUTION, RESOURCE_RARITY
+    
+    if resource_type == 'EMPTY':
+        return 0
+    
+    rarity_type = RESOURCE_DISTRIBUTION.get(resource_type, {}).get('rarity', 'NORMAL')
+    durability_range = RESOURCE_RARITY[rarity_type]['durability_range']
+    return random.randint(durability_range[0], durability_range[1])
+
 def random_resource():
     """Return a random resource type based on rarity settings"""
     from config import RESOURCE_TYPES, RESOURCE_DISTRIBUTION, RESOURCE_RARITY
