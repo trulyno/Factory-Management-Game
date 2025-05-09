@@ -14,7 +14,7 @@ class Tile:
         self.building_instance = None
         self.surveyed = False
         self.world = None  # Set by World class
-        
+    
     def update(self, dt):
         """Update tile state"""
         if self.building_instance:
@@ -25,6 +25,8 @@ class Tile:
         if self.building:
             return False
         if building_type == 'COLLECTION' and self.resource_type == 'EMPTY':
+            return False
+        if self.resource_type != 'EMPTY' and building_type != 'COLLECTION':
             return False
         if building_type == 'CENTRAL' and self.resource_type != 'EMPTY':
             return False
@@ -69,6 +71,17 @@ class Tile:
             # Owned tile
             if self.owner == 'player':
                 border_color = BLUE
+            elif self.owner and self.owner.startswith('ai_'):
+                # Get the AI instance from game and use its color
+                from game import Game
+                if Game.instance and hasattr(Game.instance, 'ai_factories'):
+                    ai_id = int(self.owner.split('_')[1])
+                    if 0 <= ai_id < len(Game.instance.ai_factories):
+                        border_color = Game.instance.ai_factories[ai_id].color
+                    else:
+                        border_color = RED  # Fallback color if AI not found
+                else:
+                    border_color = RED  # Fallback color if Game instance not available
             else:
                 border_color = RED
             pygame.draw.rect(surface, WHITE, rect)
@@ -121,6 +134,7 @@ class World:
         # Set the central tile
         self.tiles[(center_x, center_y)].owner = 'player'
         self.tiles[(center_x, center_y)].building = 'CENTRAL'
+        self.tiles[(center_x, center_y)].resource_type = 'EMPTY'
         self.tiles[(center_x, center_y)].surveyed = True
         
         # Count initial tiles
@@ -170,6 +184,7 @@ class World:
             # Set up AI territory
             self.tiles[(x, y)].owner = f'ai_{i}'
             self.tiles[(x, y)].building = 'CENTRAL'
+            self.tiles[(x, y)].resource_type = 'EMPTY'
             self.tiles[(x, y)].surveyed = True
             
             # Add surrounding tiles

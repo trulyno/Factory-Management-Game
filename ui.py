@@ -26,6 +26,12 @@ class UI:
         self.show_settings = False
         self.settings_buttons = {}
         
+        # Restart button
+        self.restart_button = None
+        
+        # Restart button
+        self.restart_button = None
+        
         # Building menu elements
         self.building_menu_rect = None
         self.menu_buttons = {}
@@ -237,6 +243,15 @@ class UI:
         y += 40
         self.draw_text(surface, f"Collecting: {tile.resource_type}", (x + 10, y), self.font)
         
+        # Check if this is a player-owned tile
+        if tile.owner != 'player':
+            # For AI-owned buildings, just show info but no interaction
+            y += 25
+            self.draw_text(surface, f"Owner: {tile.owner}", (x + 10, y), self.font)
+            y += 25
+            self.draw_text(surface, "Cannot interact with AI buildings", (x + 10, y), self.font_small)
+            return
+        
         # Target deposit info
         y += 30
         # Fix: Handle the case when target_deposit is already a Tile object
@@ -290,6 +305,14 @@ class UI:
         
         # Resource list
         self.menu_buttons.clear()
+        
+        # Check if this is a player-owned tile
+        if tile.owner != 'player':
+            # For AI-owned buildings, just show info but no interaction
+            self.draw_text(surface, f"Owner: {tile.owner}", (x + 10, y), self.font)
+            y += 25
+            self.draw_text(surface, "Cannot interact with AI buildings", (x + 10, y), self.font_small)
+            return
         
         # Fix: Access resources through the Building object using building_instance
         resources = {}
@@ -357,9 +380,17 @@ class UI:
         
         # Title
         self.draw_text(surface, "Processing Building", (x + 10, y + 10), self.font_large)
+        y += 40
+        
+        # Check if this is a player-owned tile
+        if tile.owner != 'player':
+            # For AI-owned buildings, just show info but no interaction
+            self.draw_text(surface, f"Owner: {tile.owner}", (x + 10, y), self.font)
+            y += 25
+            self.draw_text(surface, "Cannot interact with AI buildings", (x + 10, y), self.font_small)
+            return
         
         # Current recipe info
-        y += 40
         
         # Access the building instance
         building_instance = None
@@ -383,6 +414,7 @@ class UI:
                 pygame.draw.line(surface, BLACK, (check_rect.x + 8, check_rect.y + 15),
                                (check_rect.x + 17, check_rect.y + 3), 2)
             self.menu_buttons['toggle_active'] = (check_rect, None)
+            
             y += 30
             
             # Initialize current recipe index if needed
@@ -705,6 +737,11 @@ class UI:
         from game import Game  # Import inside method to avoid circular import
         from config import RECIPES
         
+        # Check for restart button clicks
+        if hasattr(self, 'restart_button') and self.restart_button and self.restart_button.collidepoint(pos):
+            Game.instance.restart_game = True
+            return True
+            
         # Handle settings panel clicks if it's visible
         if self.show_settings:
             for button_id, rect in self.settings_buttons.items():
