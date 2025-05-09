@@ -8,6 +8,7 @@ from ai import AIFactory
 from ui import UI
 from logger import GameLogger
 from stats import GameStats
+from session_saver import SessionSaver
 
 class Camera:
     def __init__(self, width, height, world_width, world_height):
@@ -171,6 +172,10 @@ class Game:
         self.game_over = False
         self.time_since_update = 0
         
+        # Create session saver and connect it to logger
+        self.session_saver = SessionSaver(self)
+        self.logger.set_session_saver(self.session_saver)
+        
     def handle_events(self):
         """Process game events"""
         for event in pygame.event.get():
@@ -254,16 +259,23 @@ class Game:
             # Update AI factories
             for ai in self.ai_factories:
                 ai.update()
+                
+            # Update session saver to record market data
+            if hasattr(self, 'session_saver'):
+                self.session_saver.update(dt)
         
         # Update world (includes buildings)
         self.world.update(dt)
-        
         # Check win condition
         if self.player.money >= WIN_CONDITION:
             self.game_over = True
             # Stop the timer when the game ends
             self.stats.stop_timer()
             self.logger.log('GAME', 'WIN', "You've reached the goal of $1,000,000!")
+            
+            # Save session data when game ends
+            if hasattr(self, 'session_saver'):
+                self.session_saver.save_session()
     
     def draw(self):
         """Render the game"""
@@ -390,5 +402,9 @@ class Game:
                     # User quit during configuration
                     self.running = False
         
+        # Save session data if the game is over
+        if hasattr(self, 'session_saver') and self.game_over:
+            self.session_saver.save_session()
+            
         pygame.quit()
         sys.exit()
