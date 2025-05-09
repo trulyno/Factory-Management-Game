@@ -202,9 +202,15 @@ class SessionSaver:
             with open(stats_path, 'w') as statsfile:
                 statsfile.write("# Player Statistics\n\n")
                 
+                # Write regular stats
                 stats_list = stats.get_stats_display()
                 for stat in stats_list:
                     statsfile.write(f"{stat}\n")
+                
+                # If this is a personal best time, mark it as such for future reference
+                if hasattr(stats, 'personal_best_time') and stats.is_personal_best():
+                    statsfile.write("\n# This is a personal best time!\n")
+                    statsfile.write(f"Personal Best Time: {stats.format_time(stats.time_played)}\n")
     
     def save_logs(self):
         """Save log files for each source category"""

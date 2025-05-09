@@ -279,13 +279,22 @@ class Game:
                 self.session_saver.update(dt)
         
         # Update world (includes buildings)
-        self.world.update(dt)
-        # Check win condition
+        self.world.update(dt)        # Check win condition
         if self.player.money >= WIN_CONDITION:
             self.game_over = True
             # Stop the timer when the game ends
             self.stats.stop_timer()
-            self.logger.log('GAME', 'WIN', "You've reached the goal of $1,000,000!")
+            
+            # Log win message with time
+            time_played_str = self.stats.format_time(self.stats.time_played)
+            win_message = f"You've reached the goal of $1,000,000! Time: {time_played_str}"
+            
+            # Check if this is a new personal best
+            if self.stats.is_personal_best():
+                win_message += " (New Personal Best!)"
+                self.logger.log('GAME', 'WIN', win_message)
+            else:
+                self.logger.log('GAME', 'WIN', win_message)
             
             # Save session data when game ends
             if hasattr(self, 'session_saver'):
@@ -353,12 +362,16 @@ class Game:
             text_win = font_large.render("You Win!", True, GREEN)
             text_rect_win = text_win.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//4))
             self.screen.blit(text_win, text_rect_win)
-            
-            # Draw stats
+              # Draw stats
             font_stats = pygame.font.SysFont('Arial', 24)
             stats_list = self.stats.get_stats_display()
             for i, stat_text in enumerate(stats_list):
-                text_surface = font_stats.render(stat_text, True, WHITE)
+                # Highlight new personal best with gold color
+                text_color = WHITE
+                if "New Record" in stat_text:
+                    text_color = (255, 215, 0)  # Gold color for new record
+                
+                text_surface = font_stats.render(stat_text, True, text_color)
                 text_rect = text_surface.get_rect(
                     center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//4 + 80 + i * 40)
                 )
