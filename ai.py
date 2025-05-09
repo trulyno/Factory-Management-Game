@@ -432,6 +432,11 @@ class AIFactory:
             pos = random.choice(potential_tiles)
             self.money -= SURVEY_COST
             self.surveyed_tiles.add(pos)  # Track surveyed tiles
+            
+            # Also mark the tile as surveyed so it's visible to the player
+            tile = self.world.tiles[pos]
+            tile.surveyed = True
+            
             self.log(f"Decision: Survey tile at {pos}")
             return True
         
