@@ -11,6 +11,7 @@ class GameStats:
         self.start_time = time.time()
         self.time_played = 0
         self.timer_stopped = False
+        self.tiles_surveyed = 0
     
     def update_time_played(self):
         """Update the time played stat"""

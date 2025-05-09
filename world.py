@@ -116,13 +116,20 @@ class Tile:
                 TILE_SIZE//2
             )
             pygame.draw.rect(surface, building_color, building_rect)
-    
     def get_tile_cost(self):
-        """Calculate the cost to buy this tile"""
+        """Calculate the cost to buy this tile using dynamic pricing"""
+        # Get current multiplier from PriceManager
+        from economy import PriceManager
+        
+        multiplier = 1.0
+        if PriceManager.instance:
+            multiplier = PriceManager.instance.get_tile_cost_multiplier()
+        
         # If the tile has been surveyed, provide a discount
         if self.surveyed:
-            return int(self.price * 0.7)  # 30% discount for surveyed tiles
-        return self.price
+            return int(self.price * 0.7 * multiplier)  # 30% discount for surveyed tiles
+        
+        return int(self.price * multiplier)
 
 class World:
     def __init__(self):
@@ -158,6 +165,17 @@ class World:
         from config import RESOURCE_DISTRIBUTION, RESOURCE_RARITY, TILE_BASE_COST, TILE_COST_MULTIPLIER
         
         for coords, tile in self.tiles.items():
+            resource_type = tile.resource_type
+            rarity = RESOURCE_DISTRIBUTION.get(resource_type, {}).get('rarity', 'NORMAL')
+            multiplier = RESOURCE_RARITY.get(rarity, {}).get('multiplier', 1.0)
+            
+            # Calculate base price based on rarity
+            base_price = TILE_BASE_COST / (multiplier or 0.1)  # Avoid division by zero
+            tile.price = int(base_price)
+            
+            # Set durability based on rarity
+            durability_range = RESOURCE_RARITY.get(rarity, {}).get('durability_range', (10, 20))
+            tile.durability = random.randint(durability_range[0], durability_range[1])
             resource = tile.resource_type
             
             # Base price starts at TILE_BASE_COST

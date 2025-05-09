@@ -1,5 +1,6 @@
 import pygame
 from config import *
+from economy import PriceManager
 
 class UI:
     def __init__(self, screen_width, screen_height):
@@ -201,7 +202,7 @@ class UI:
                 y += 35
             
             # Survey tile button
-            if not tile.surveyed and tile.owner is None and player.can_afford(SURVEY_COST):
+            if not tile.surveyed and tile.owner is None and player.can_afford(PriceManager.instance.get_survey_cost()):
                 survey_rect = pygame.Rect(
                     self.ui_panel_rect.x + 10, y,
                     UI_PANEL_WIDTH - 20, 30
@@ -209,10 +210,46 @@ class UI:
                 self.action_buttons['survey'] = survey_rect
                 pygame.draw.rect(surface, LIGHT_GRAY, survey_rect)
                 pygame.draw.rect(surface, BLACK, survey_rect, 1)
-                self.draw_text(surface, f"Survey Tile (${SURVEY_COST}) - 30% discount on buy", 
+                self.draw_text(surface, f"Survey Tile (${PriceManager.instance.get_survey_cost()}) - 30% discount on buy", 
                             (survey_rect.x + 10, survey_rect.y + 5), 
                             self.font_small)
                 y += 35
+        
+        # Price multipliers section
+        if PriceManager.instance:
+            self.draw_text(surface, "Economy Status:", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font)
+            y += 25
+            
+            # Show current price multipliers
+            survey_mult = PriceManager.instance.survey_cost_multiplier
+            tile_mult = PriceManager.instance.tile_cost_multiplier
+            building_mult = PriceManager.instance.building_cost_multiplier
+            
+            # Color-code based on multiplier level
+            def get_multiplier_color(mult):
+                if mult < 1.5:
+                    return GREEN  # Good
+                elif mult < 3.0:
+                    return YELLOW  # Warning
+                else:
+                    return RED  # Danger
+            
+            self.draw_text(surface, f"Survey costs: {survey_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(survey_mult))
+            y += 20
+            
+            self.draw_text(surface, f"Tile costs: {tile_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(tile_mult))
+            y += 20
+            
+            self.draw_text(surface, f"Building costs: {building_mult:.2f}x", 
+                       (self.ui_panel_rect.x + 10, y), 
+                       self.font_small, get_multiplier_color(building_mult))
+            y += 35
         
         # Market prices
         y = self.height - 200

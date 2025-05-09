@@ -2,6 +2,121 @@ import random
 import time
 from config import *
 
+class PriceManager:
+    instance = None  # Class variable for global access
+    
+    def __init__(self):
+        PriceManager.instance = self  # Set this instance as the global one
+        self.last_update_time = time.time()
+        self.time_elapsed = 0
+        self.update_count = 0
+        
+        # Current multipliers
+        self.survey_cost_multiplier = 1.0
+        self.tile_cost_multiplier = 1.0
+        self.building_cost_multiplier = 1.0
+        
+        # Initialize current costs
+        self.update_costs()
+    
+    def update(self, dt):
+        """Update prices based on game progress and time"""
+        self.time_elapsed += dt
+        
+        current_time = time.time()
+        if current_time - self.last_update_time < PRICE_UPDATE_INTERVAL:
+            return
+        
+        self.last_update_time = current_time
+        self.update_count += 1
+        
+        # Calculate economic factors for price adjustment
+        self._calculate_price_adjustments()
+        
+        # Update all costs
+        self.update_costs()
+    
+    def _calculate_price_adjustments(self):
+        """Calculate price adjustments based on game state"""
+        from game import Game
+        
+        # Get game difficulty scaling
+        difficulty = AI_DIFFICULTY  # From config
+        difficulty_scale = DIFFICULTY_SCALING.get(difficulty, 1.0)
+        
+        # Base time-based increase (now includes time elapsed in-game)
+        base_increase = (PRICE_INCREASE_RATE * 
+                        (1 + (self.update_count * 0.01)) * 
+                        (1 + (self.time_elapsed * TIME_SCALING_FACTOR)))
+        
+        # Apply difficulty scaling
+        base_increase *= difficulty_scale
+        
+        # Get economic statistics
+        total_economy = Game.instance.stats.total_money_generated
+        num_buildings = Game.instance.stats.num_buildings
+        tiles_owned = Game.instance.stats.tiles_owned
+        tiles_surveyed = Game.instance.stats.tiles_surveyed
+        
+        # Calculate total AI economy to add to economic pressure
+        ai_economy = 0
+        for ai in Game.instance.ai_factories:
+            ai_economy += ai.money
+            
+        total_economy += ai_economy
+        
+        # Calculate multiplier adjustments with diminishing returns
+        # Using logarithmic scaling to prevent runaway inflation
+        from math import log
+        
+        # Add 1 to avoid log(0)
+        economy_log_scale = log(total_economy + 1) / 10
+        economy_factor = total_economy * ECONOMY_SCALING_FACTOR * economy_log_scale
+        
+        building_factor = num_buildings * BUILDINGS_SCALING_FACTOR
+        tile_factor = (tiles_owned + tiles_surveyed) * TILES_SCALING_FACTOR
+        
+        # Apply different rates to different cost types
+        # Survey costs rise slower than tile costs, which rise slower than building costs
+        self.survey_cost_multiplier += base_increase * 0.7 + building_factor * 0.25 + economy_factor * 0.15
+        self.tile_cost_multiplier += base_increase * 0.9 + tile_factor * 0.4 + economy_factor * 0.2
+        self.building_cost_multiplier += base_increase * 1.1 + building_factor * 0.35 + economy_factor * 0.3
+        
+        # Cap multipliers with both minimum and maximum
+        self.survey_cost_multiplier = max(MIN_PRICE_MULTIPLIER, min(self.survey_cost_multiplier, MAX_PRICE_MULTIPLIER))
+        self.tile_cost_multiplier = max(MIN_PRICE_MULTIPLIER, min(self.tile_cost_multiplier, MAX_PRICE_MULTIPLIER))
+        self.building_cost_multiplier = max(MIN_PRICE_MULTIPLIER, min(self.building_cost_multiplier, MAX_PRICE_MULTIPLIER))
+        
+        # Log significant price changes
+        if self.update_count % 5 == 0 and Game.instance.logger:
+            Game.instance.logger.log('ECONOMY', 'PRICES', 
+                                   f"Price levels - Survey: {self.survey_cost_multiplier:.2f}x, " +
+                                   f"Tiles: {self.tile_cost_multiplier:.2f}x, " +
+                                   f"Buildings: {self.building_cost_multiplier:.2f}x")
+    
+    def update_costs(self):
+        """Update all costs based on current multipliers"""
+        # Update survey cost
+        global SURVEY_COST
+        SURVEY_COST = int(SURVEY_BASE_COST * self.survey_cost_multiplier)
+        
+        # Update building costs
+        for building_type in BUILDINGS:
+            if building_type != 'CENTRAL':  # Keep central building free
+                BUILDINGS[building_type]['cost'] = int(BUILDINGS[building_type]['base_cost'] * self.building_cost_multiplier)
+    
+    def get_tile_cost_multiplier(self):
+        """Return the current tile cost multiplier"""
+        return self.tile_cost_multiplier
+    
+    def get_survey_cost(self):
+        """Return the current survey cost"""
+        return SURVEY_COST
+    
+    def get_building_cost(self, building_type):
+        """Return the current cost for a building type"""
+        return BUILDINGS[building_type]['cost']
+
 class Market:
     instance = None  # Class variable for global access
     def __init__(self):

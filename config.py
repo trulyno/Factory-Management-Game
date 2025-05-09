@@ -116,20 +116,37 @@ RECIPES = {
 
 # Building types and costs
 BUILDINGS = {
-    'CENTRAL': {'cost': 0, 'color': BLUE},
-    'COLLECTION': {'cost': 50, 'color': GREEN},
-    'DEPOSIT': {'cost': 100, 'color': YELLOW},
-    'PROCESSING': {'cost': 200, 'color': PURPLE},
-    'COMMERCE': {'cost': 300, 'color': RED}
+    'CENTRAL': {'base_cost': 0, 'cost': 0, 'color': BLUE},
+    'COLLECTION': {'base_cost': 50, 'cost': 50, 'color': GREEN},
+    'DEPOSIT': {'base_cost': 100, 'cost': 100, 'color': YELLOW},
+    'PROCESSING': {'base_cost': 200, 'cost': 200, 'color': PURPLE},
+    'COMMERCE': {'base_cost': 300, 'cost': 300, 'color': RED}
 }
 
 # Game settings
 INITIAL_MONEY = 1000
 INITIAL_TILES = 5
 WIN_CONDITION = 10000
-SURVEY_COST = 50
+
+# Base pricing settings
+SURVEY_BASE_COST = 50
 TILE_BASE_COST = 100
 TILE_COST_MULTIPLIER = 0.9
+
+# Dynamic pricing configuration
+PRICE_UPDATE_INTERVAL = 60  # Seconds between price adjustments (more frequent updates)
+PRICE_INCREASE_RATE = 0.02  # Base percentage increase per update (smoother progression)
+MAX_PRICE_MULTIPLIER = 5.0  # Maximum price multiplier from base price
+MIN_PRICE_MULTIPLIER = 0.8  # Minimum price multiplier (prevents prices getting too low)
+ECONOMY_SCALING_FACTOR = 0.00008  # How much total economy affects prices
+BUILDINGS_SCALING_FACTOR = 0.015  # How much total buildings affects prices
+TILES_SCALING_FACTOR = 0.008  # How much surveyed tiles affects prices
+TIME_SCALING_FACTOR = 0.002  # How much game time affects prices
+DIFFICULTY_SCALING = {
+    'EASY': 0.7,      # 70% of normal price increases
+    'NORMAL': 1.0,    # Normal price increases
+    'HARD': 1.3       # 130% of normal price increases
+}
 
 # Collection and Transport settings
 COLLECTION_DURATION = 5  # seconds between resource collection

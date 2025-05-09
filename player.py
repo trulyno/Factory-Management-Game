@@ -1,5 +1,7 @@
 import pygame
 from config import *
+import time
+from economy import PriceManager
 
 class Player:
     def __init__(self):
@@ -34,6 +36,7 @@ class Player:
         if not tile.can_build(building_type):
             return False
             
+        # Get the current cost from the BUILDINGS config (dynamically updated by PriceManager)
         cost = BUILDINGS[building_type]['cost']
         if not self.can_afford(cost):
             return False
@@ -43,17 +46,20 @@ class Player:
         from game import Game
         Game.instance.stats.total_money_spent += cost
         Game.instance.stats.num_buildings += 1
-        Game.instance.logger.log('PLAYER', 'BUILD', f'Built {building_type} at ({tile.x}, {tile.y})')
+        Game.instance.logger.log('PLAYER', 'BUILD', f'Built {building_type} at ({tile.x}, {tile.y}) for ${cost}')
         return True
-    
+        
     def survey_tile(self, tile):
         """Survey a tile to reveal resources"""
-        if self.can_afford(SURVEY_COST):
-            self.money -= SURVEY_COST
+        # Get current survey cost from global config (updated by PriceManager)
+        
+        if self.can_afford(PriceManager.instance.get_survey_cost()):
+            self.money -= PriceManager.instance.get_survey_cost()
             tile.surveyed = True
             from game import Game
-            Game.instance.stats.total_money_spent += SURVEY_COST
-            Game.instance.logger.log('PLAYER', 'SURVEY', f'Surveyed tile at ({tile.x}, {tile.y})')
+            Game.instance.stats.total_money_spent += PriceManager.instance.get_survey_cost()
+            Game.instance.stats.tiles_surveyed = Game.instance.stats.tiles_surveyed + 1
+            Game.instance.logger.log('PLAYER', 'SURVEY', f'Surveyed tile at ({tile.x}, {tile.y}) for ${PriceManager.instance.get_survey_cost()}')
             return True
         return False
     

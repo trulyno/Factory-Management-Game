@@ -146,9 +146,11 @@ class Game:
         
         # Game objects
         from config import WORLD_SIZE, NUM_AI_PLAYERS
+        from economy import PriceManager, Market
         self.world = World()  # World now uses WORLD_SIZE from config
         self.player = Player()
         self.market = Market()
+        self.price_manager = PriceManager()  # Initialize the price manager
         self.logger = GameLogger()
         self.stats = GameStats()  # Initialize stats tracker
         
@@ -250,6 +252,9 @@ class Game:
         """Update game state"""
         if self.game_over:
             return
+            
+        # Update price manager continuously
+        self.price_manager.update(dt)
             
         # Update market prices periodically
         self.time_since_update += dt

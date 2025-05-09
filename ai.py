@@ -2,7 +2,8 @@ import random
 import time
 from config import *
 import utils
-from logger import GameLogger  # Import logger directly instead of from Game
+from logger import GameLogger
+from economy import PriceManager
 
 class AIFactory:
     def __init__(self, factory_id, world):
@@ -416,7 +417,9 @@ class AIFactory:
     
     def try_survey_tile(self):
         """Try to survey a tile to find resources, returns True if successful"""
-        if self.money < SURVEY_COST:
+        # Get current survey cost from global config (updated by PriceManager)
+        
+        if self.money < PriceManager.instance.get_survey_cost():
             return False
             
         # Find adjacent tiles that can be surveyed
@@ -430,12 +433,15 @@ class AIFactory:
         
         if potential_tiles:
             pos = random.choice(potential_tiles)
-            self.money -= SURVEY_COST
+            self.money -= PriceManager.instance.get_survey_cost()
             self.surveyed_tiles.add(pos)  # Track surveyed tiles
             
             # Also mark the tile as surveyed so it's visible to the player
             tile = self.world.tiles[pos]
             tile.surveyed = True
+            
+            # Log with current cost
+            self.log(f"Decision: Survey tile at ({tile.x}, {tile.y}) for ${PriceManager.instance.get_survey_cost()}")
             
             self.log(f"Decision: Survey tile at {pos}")
             return True
