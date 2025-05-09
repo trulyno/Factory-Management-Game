@@ -300,7 +300,7 @@ class UI:
         x = self.ui_panel_rect.x + 10
         y = self.height - 300
         width = UI_PANEL_WIDTH - 20
-        height = 200
+        height = 250  # Increased height to accommodate two-line display for each resource
         
         self.building_menu_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(surface, GRAY, self.building_menu_rect)
@@ -327,33 +327,33 @@ class UI:
             resources = tile.building_instance.resources
             
         for resource, amount in resources.items():
-            # Resource name and amount
-            self.draw_text(surface, f"{resource}: {amount}", (x + 10, y), self.font)
+            # Get current market price for this resource
+            price = market.prices.get(resource, 0)
             
-            # Sell all button
-            sell_all_rect = pygame.Rect(x + width - 150, y, 60, 20)
-            pygame.draw.rect(surface, WHITE, sell_all_rect)
-            pygame.draw.rect(surface, BLACK, sell_all_rect, 1)
-            self.draw_text(surface, "Sell All", (sell_all_rect.x + 5, sell_all_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'sell_all_{resource}'] = (sell_all_rect, resource)
+            # LINE 1: Resource name and potential earnings
+            resource_display = f"{resource}: {amount}"
+            self.draw_text(surface, resource_display, (x + 10, y), self.font)
             
-            # Amount input
-            input_rect = pygame.Rect(x + width - 80, y, 30, 20)
-            pygame.draw.rect(surface, WHITE, input_rect)
-            pygame.draw.rect(surface, BLACK, input_rect, 1)
-            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource:
-                self.draw_text(surface, self.sell_amount_input, (input_rect.x + 5, input_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'input_{resource}'] = (input_rect, resource)
+            # Calculate earnings based on sell amount input or total amount
+            calculated_amount = amount
+            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource and self.sell_amount_input:
+                try:
+                    input_amount = int(self.sell_amount_input)
+                    if 0 < input_amount <= amount:
+                        calculated_amount = input_amount
+                except ValueError:
+                    pass
+                    
+            earnings = calculated_amount * price
+            earnings_text = f"Value: ${earnings:.2f}"
+            self.draw_text(surface, earnings_text, (x + width - 120, y), self.font_small, GREEN)
             
-            # Sell amount button
-            sell_amt_rect = pygame.Rect(x + width - 45, y, 35, 20)
-            pygame.draw.rect(surface, WHITE, sell_amt_rect)
-            pygame.draw.rect(surface, BLACK, sell_amt_rect, 1)
-            self.draw_text(surface, "Sell", (sell_amt_rect.x + 5, sell_amt_rect.y + 2), self.font_small, BLACK)
-            self.menu_buttons[f'sell_amt_{resource}'] = (sell_amt_rect, resource)
+            y += 25  # Move to line 2 for this resource
+            
+            # LINE 2: Interactive controls
             
             # Autosell checkbox
-            check_rect = pygame.Rect(x + width - 190, y, 20, 20)
+            check_rect = pygame.Rect(x + 10, y, 20, 20)
             pygame.draw.rect(surface, WHITE, check_rect)
             pygame.draw.rect(surface, BLACK, check_rect, 1)
             
@@ -369,7 +369,32 @@ class UI:
                                (check_rect.x + 17, check_rect.y + 3), 2)
             self.menu_buttons[f'autosell_{resource}'] = (check_rect, resource)
             
-            y += 25
+            # Auto-sell label
+            self.draw_text(surface, "Auto", (check_rect.x + 25, check_rect.y + 2), self.font_small)
+            
+            # Sell all button
+            sell_all_rect = pygame.Rect(x + 70, y, 60, 20)
+            pygame.draw.rect(surface, WHITE, sell_all_rect)
+            pygame.draw.rect(surface, BLACK, sell_all_rect, 1)
+            self.draw_text(surface, "Sell All", (sell_all_rect.x + 5, sell_all_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'sell_all_{resource}'] = (sell_all_rect, resource)
+            
+            # Amount input
+            input_rect = pygame.Rect(x + 140, y, 40, 20)
+            pygame.draw.rect(surface, WHITE, input_rect)
+            pygame.draw.rect(surface, BLACK, input_rect, 1)
+            if self.input_active and self.selected_deposit == tile and self.selected_resource == resource:
+                self.draw_text(surface, self.sell_amount_input, (input_rect.x + 5, input_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'input_{resource}'] = (input_rect, resource)
+            
+            # Sell amount button
+            sell_amt_rect = pygame.Rect(x + 190, y, 40, 20)
+            pygame.draw.rect(surface, WHITE, sell_amt_rect)
+            pygame.draw.rect(surface, BLACK, sell_amt_rect, 1)
+            self.draw_text(surface, "Sell", (sell_amt_rect.x + 5, sell_amt_rect.y + 2), self.font_small, BLACK)
+            self.menu_buttons[f'sell_amt_{resource}'] = (sell_amt_rect, resource)
+            
+            y += 30  # Extra spacing between resources
 
     def draw_processing_menu(self, surface, tile):
         """Draw menu for processing buildings"""
@@ -803,12 +828,11 @@ class UI:
         if self.building_menu_rect and self.building_menu_rect.collidepoint(pos):
             for button_id, (rect, data) in self.menu_buttons.items():
                 if rect.collidepoint(pos):
-                    if button_id.startswith('deposit_'):
-                        # Set collection station target
+                    if button_id.startswith('deposit_'):                        # Set collection station target
                         if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
                             self.selected_tile.building_instance.target_deposit = data
                     elif button_id.startswith('sell_all_'):
-                        # Sell all of a resource
+                        # Sell all of a resource and completely remove it from deposit
                         resource = data
                         amount = 0
                         # Get resources from building object
@@ -818,8 +842,12 @@ class UI:
                         if amount > 0:
                             price = Game.instance.market.prices[resource]
                             if player.sell_resources(self.selected_tile.building_instance, resource, amount, price):
+                                # Completely remove the resource from the dictionary to free up slot
+                                if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
+                                    if resource in self.selected_tile.building_instance.resources:
+                                        del self.selected_tile.building_instance.resources[resource]
                                 Game.instance.logger.log('PLAYER', 'SELL', 
-                                    f'Sold {amount} {resource} for ${amount * price}')
+                                    f'Sold all {amount} {resource} for ${amount * price} and removed from deposit')
                     elif button_id.startswith('input_'):
                         # Activate input for sell amount
                         self.input_active = True
