@@ -121,6 +121,7 @@ INITIAL_TILES = 5
 WIN_CONDITION = 10000
 SURVEY_COST = 50
 TILE_BASE_COST = 100
+TILE_COST_MULTIPLIER = 0.8
 
 # Collection and Transport settings
 COLLECTION_DURATION = 5  # seconds between resource collection
@@ -148,8 +149,8 @@ AI_EXPANSION_RATE = 0.7  # Higher values make AI more likely to expand territory
 # Market settings
 MARKET_UPDATE_INTERVAL = 10  # Seconds between market price updates
 MARKET_PRICE_ADJUSTMENT_FACTOR = 0.05  # Maximum percentage change in price per update
-MARKET_MAX_PRICE_MULTIPLIER = 2.0  # Maximum multiplier from base price
-MARKET_MIN_PRICE_MULTIPLIER = 0.5  # Minimum multiplier from base price
+MARKET_MAX_PRICE_MULTIPLIER = 2.5  # Maximum multiplier from base price
+MARKET_MIN_PRICE_MULTIPLIER = 0.4  # Minimum multiplier from base price (lower for more volatility)
 
 # Debug settings
 DEBUG_LOGGER = False  # Whether to show the in-game log UI

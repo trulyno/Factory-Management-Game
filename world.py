@@ -155,7 +155,7 @@ class World:
     
     def initialize_tile_prices(self):
         """Set initial tile prices based on resource rarity"""
-        from config import RESOURCE_DISTRIBUTION, RESOURCE_RARITY, TILE_BASE_COST
+        from config import RESOURCE_DISTRIBUTION, RESOURCE_RARITY, TILE_BASE_COST, TILE_COST_MULTIPLIER
         
         for coords, tile in self.tiles.items():
             resource = tile.resource_type
@@ -182,10 +182,10 @@ class World:
                 random_factor = 0.8 + (random.random() * 0.4)  # 0.8 to 1.2
                 
                 # Calculate final price
-                tile.price = int(base_price * rarity_multiplier * random_factor)
+                tile.price = int(base_price * rarity_multiplier * random_factor * TILE_COST_MULTIPLIER)
             else:
                 # Empty tiles are cheaper
-                tile.price = int(base_price * 0.8)  # 20% cheaper than base
+                tile.price = int(base_price * TILE_COST_MULTIPLIER)
     
     def propagate_tile_prices(self):
         """Propagate resource tile prices to neighboring tiles within 3 tiles distance"""

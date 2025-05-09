@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 from config import *
 from world import World
 from player import Player
@@ -255,6 +256,14 @@ class Game:
         if self.time_since_update >= MARKET_UPDATE_INTERVAL:
             self.time_since_update = 0
             self.market.update_prices()
+            
+            # Occasionally create market shocks (1% chance per update)
+            if random.random() < 0.01:
+                affected_resources = self.market.create_market_shock()
+                # Log the market shock event if logger is available
+                if hasattr(self, 'logger'):
+                    resources_str = ', '.join(affected_resources)
+                    self.logger.log("MARKET", "SHOCK", f"Market shock affecting: {resources_str}")
             
             # Update AI factories
             for ai in self.ai_factories:
