@@ -147,3 +147,6 @@ AI_EXPANSION_RATE = 0.7  # Higher values make AI more likely to expand territory
 
 # Debug settings
 DEBUG_LOGGER = False  # Whether to show the in-game log UI
+LOGGER_SHOW_PLAYER = False  # Whether to show player-related logs (PLAYER source)
+LOGGER_SHOW_AI = True      # Whether to show AI-related logs (AI-x source)
+LOGGER_SHOW_BUILDING = False  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)

@@ -13,6 +13,10 @@ class AIFactory:
         self.buildings = []
         self.update_owned_tiles()
         
+        # Generate a unique color for this AI factory that differs from player's BLUE
+        # and from other AI factories
+        self.color = self.generate_unique_color(factory_id)
+        
         # Use AI difficulty settings from config
         self.difficulty = AI_DIFFICULTY
         difficulty_settings = AI_DIFFICULTY_LEVELS[self.difficulty]
@@ -33,9 +37,45 @@ class AIFactory:
         # Create our own logger instance
         self.logger = GameLogger()
         self.log(f"Initialized AI Factory {self.id} with difficulty: {self.difficulty}")
+    
+    def generate_unique_color(self, factory_id):
+        """Generate a unique color for this AI factory"""
+        # Predefined list of distinct colors to avoid close shades
+        # Avoiding blue (player color) and colors that are too similar
+        distinct_colors = [
+            (255, 0, 0),     # Red
+            (0, 180, 0),     # Green
+            (255, 165, 0),   # Orange
+            (128, 0, 128),   # Purple
+            (255, 192, 203), # Pink
+            (0, 255, 255),   # Cyan
+            (255, 255, 0),   # Yellow
+            (165, 42, 42),   # Brown
+            (100, 100, 100), # Dark Gray
+            (220, 20, 60),   # Crimson
+        ]
+        
+        # If we have more AIs than predefined colors, generate random ones
+        if factory_id < len(distinct_colors):
+            return distinct_colors[factory_id]
+        else:
+            # Generate a random color that's not too close to BLUE (player color)
+            while True:
+                r = random.randint(50, 255)
+                g = random.randint(50, 255)
+                b = random.randint(50, 255)
+                # Make sure it's not too close to blue (player color)
+                if not (b > 200 and r < 100 and g < 100):
+                    # Also check it's not too close to WHITE or BLACK
+                    if not (r > 200 and g > 200 and b > 200) and not (r < 50 and g < 50 and b < 50):
+                        return (r, g, b)
         
     def log(self, message):
         """Helper method to log AI actions"""
+        # Include color in initialization message
+        if message.startswith("Initialized AI Factory"):
+            color_info = f"Color: RGB{self.color}"
+            message = f"{message} - {color_info}"
         self.logger.log(f'AI-{self.id}', 'INFO', message)
         
     def update_owned_tiles(self):
@@ -226,6 +266,7 @@ class AIFactory:
             if self.money >= cost:
                 self.money -= cost
                 tile.owner = f'ai_{self.id}'
+                tile.surveyed = True  # Auto-survey when buying a tile
                 self.owned_tiles.append(tile)
                 self.log(f"Decision: Buy tile at ({tile.x}, {tile.y}) for ${cost}")
                 return True
@@ -255,7 +296,7 @@ class AIFactory:
         if collection_count > 0 and deposit_count == 0:
             # Try to build a deposit on any empty tile
             for tile in self.owned_tiles:
-                if tile.building is None:
+                if tile.building is None and tile.can_build('DEPOSIT'):
                     if self.money >= BUILDINGS['DEPOSIT']['cost']:
                         # Use set_building method to properly initialize the building instance
                         tile.set_building('DEPOSIT')
@@ -265,7 +306,7 @@ class AIFactory:
         
         # First, build collection on resource tiles
         for tile in self.owned_tiles:
-            if tile.building is None and tile.resource_type != 'EMPTY':
+            if tile.building is None and tile.resource_type != 'EMPTY' and tile.can_build('COLLECTION'):
                 if self.money >= BUILDINGS['COLLECTION']['cost']:
                     # Use set_building method to properly initialize the building instance
                     tile.set_building('COLLECTION')
@@ -275,7 +316,7 @@ class AIFactory:
         
         # Then build a deposit (if we have space and we're at the original logic)
         for tile in self.owned_tiles:
-            if tile.building is None:
+            if tile.building is None and tile.can_build('DEPOSIT'):
                 if self.has_nearby_building('COLLECTION', tile):
                     if self.money >= BUILDINGS['DEPOSIT']['cost']:
                         # Use set_building method to properly initialize the building instance
@@ -293,7 +334,7 @@ class AIFactory:
         # Critical: If we have collections but no deposits at all, build a deposit ASAP
         if collection_count > 0 and deposit_count == 0:
             for tile in self.owned_tiles:
-                if tile.building is None:
+                if tile.building is None and tile.can_build('DEPOSIT'):
                     if self.money >= BUILDINGS['DEPOSIT']['cost']:
                         # Use set_building method to properly initialize the building instance
                         tile.set_building('DEPOSIT')
@@ -305,7 +346,7 @@ class AIFactory:
         if collection_count > deposit_count:
             # Try to build a deposit near collection
             for tile in self.owned_tiles:
-                if tile.building is None and self.has_nearby_building('COLLECTION', tile):
+                if tile.building is None and tile.can_build('DEPOSIT') and self.has_nearby_building('COLLECTION', tile):
                     if self.money >= BUILDINGS['DEPOSIT']['cost']:
                         # Use set_building method to properly initialize the building instance
                         tile.set_building('DEPOSIT')
@@ -316,7 +357,7 @@ class AIFactory:
             # If we can't find a tile near collection but still need deposits, build one anywhere
             if collection_count > deposit_count * 2:
                 for tile in self.owned_tiles:
-                    if tile.building is None:
+                    if tile.building is None and tile.can_build('DEPOSIT'):
                         if self.money >= BUILDINGS['DEPOSIT']['cost']:
                             # Use set_building method to properly initialize the building instance
                             tile.set_building('DEPOSIT')
@@ -326,7 +367,7 @@ class AIFactory:
         
         # Otherwise prioritize collection on resources
         for tile in self.owned_tiles:
-            if tile.building is None and tile.resource_type != 'EMPTY':
+            if tile.building is None and tile.resource_type != 'EMPTY' and tile.can_build('COLLECTION'):
                 if self.money >= BUILDINGS['COLLECTION']['cost']:
                     # Use set_building method to properly initialize the building instance
                     tile.set_building('COLLECTION')
@@ -337,7 +378,7 @@ class AIFactory:
         # If we have enough money, consider a processing building
         if self.money >= BUILDINGS['PROCESSING']['cost'] and self.money >= AI_PROCESSING_THRESHOLD:
             for tile in self.owned_tiles:
-                if tile.building is None and self.has_nearby_building('DEPOSIT', tile):
+                if tile.building is None and tile.can_build('PROCESSING') and self.has_nearby_building('DEPOSIT', tile):
                     # Use set_building method to properly initialize the building instance
                     tile.set_building('PROCESSING')
                     self.money -= BUILDINGS['PROCESSING']['cost']
@@ -351,7 +392,7 @@ class AIFactory:
         # First check for commerce buildings if we have enough money
         if self.money >= BUILDINGS['COMMERCE']['cost'] and self.money >= AI_COMMERCE_THRESHOLD:
             for tile in self.owned_tiles:
-                if tile.building is None and self.has_nearby_building('PROCESSING', tile):
+                if tile.building is None and tile.can_build('COMMERCE') and self.has_nearby_building('PROCESSING', tile):
                     # Use set_building method to properly initialize the building instance
                     tile.set_building('COMMERCE')
                     self.money -= BUILDINGS['COMMERCE']['cost']
@@ -361,7 +402,7 @@ class AIFactory:
         # Then check for processing buildings
         if self.money >= BUILDINGS['PROCESSING']['cost']:
             for tile in self.owned_tiles:
-                if tile.building is None and self.has_nearby_building('DEPOSIT', tile):
+                if tile.building is None and tile.can_build('PROCESSING') and self.has_nearby_building('DEPOSIT', tile):
                     # Use set_building method to properly initialize the building instance
                     tile.set_building('PROCESSING')
                     self.money -= BUILDINGS['PROCESSING']['cost']

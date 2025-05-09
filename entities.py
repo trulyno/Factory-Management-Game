@@ -146,7 +146,7 @@ class Building:
     
     def update_processing(self, dt):
         """Handle processing building functionality"""
-        from config import RECIPES, TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE, DEPOSIT_SIZE
+        from config import RECIPES, TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE, DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
         from game import Game
         
         # Skip processing if inactive
@@ -169,50 +169,54 @@ class Building:
             
         # State machine for processing
         if self.processing_state == "idle":
-            # Find the closest deposit to check for input resources
-            if not self.resource_source:
-                self.resource_source = self.find_closest_deposit_with_resources(recipe['input1'], 1)
-                # If there's a second input, make sure deposit has that too or find another deposit
-                if recipe['input2'] and self.resource_source:
-                    if not self.has_resource_in_deposit(self.resource_source, recipe['input2'], 1):
-                        other_deposit = self.find_closest_deposit_with_resources(recipe['input2'], 1)
-                        if other_deposit:
-                            # Need to choose one that has both or just use two separate requests
-                            if not self.resource_source or self.get_distance_to(other_deposit.tile) < self.get_distance_to(self.resource_source.tile):
-                                self.resource_source = other_deposit
-                
-                if not self.resource_source:
-                    # Log resource shortage
-                    if Game.instance:
-                        current_time = pygame.time.get_ticks() / 1000.0
-                        if current_time - self.last_error_log_time >= self.error_log_cooldown:
-                            Game.instance.logger.log('PROCESSING', 'ERROR', 
-                                                    f"No deposit found with required resources for {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
-                            self.last_error_log_time = current_time
-                    return
-                
-            # Find output deposit
-            if not self.output_target:
-                self.output_target = self.find_closest_deposit_with_space()
-                if not self.output_target:
-                    # Log no output deposit
-                    if Game.instance:
-                        current_time = pygame.time.get_ticks() / 1000.0
-                        if current_time - self.last_error_log_time >= self.error_log_cooldown:
-                            Game.instance.logger.log('PROCESSING', 'ERROR', 
-                                                   f"No deposit found with space for output at ({self.tile.x}, {self.tile.y})")
-                            self.last_error_log_time = current_time
-                    return
+            # Initialize resource sources, we'll have one for each input resource
+            self.resource_sources = {}
+            self.input_transport_times = {}
             
-            # Request resources from deposit
+            # Check if output deposit has space for the recipe output
+            output_resource = recipe['output']
+            output_amount = recipe.get('output_amount', 1)
+            
+            # Find closest deposit that has space for the output
+            self.output_target = self.find_closest_deposit_with_space()
+            
+            # Verify the output target can accept the new resource (this checks both space and resource type limits)
+            if not self.output_target or not self.output_target.can_accept_resource(output_resource, output_amount):
+                # Log no suitable output deposit
+                if Game.instance:
+                    current_time = pygame.time.get_ticks() / 1000.0
+                    if current_time - self.last_error_log_time >= self.error_log_cooldown:
+                        Game.instance.logger.log('PROCESSING', 'ERROR', 
+                                              f"No deposit has space for output at ({self.tile.x}, {self.tile.y})")
+                        self.last_error_log_time = current_time
+                return
+            
+            # Find deposits for each input resource
+            for input_resource in [recipe['input1'], recipe['input2']]:
+                if input_resource:  # Skip if None (for recipes that only need 1 input)
+                    deposit = self.find_closest_deposit_with_resources(input_resource, 1)
+                    if not deposit:
+                        # Log resource shortage for this specific input
+                        if Game.instance:
+                            current_time = pygame.time.get_ticks() / 1000.0
+                            if current_time - self.last_error_log_time >= self.error_log_cooldown:
+                                Game.instance.logger.log('PROCESSING', 'ERROR', 
+                                                       f"No deposit found with {input_resource} for {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
+                                self.last_error_log_time = current_time
+                        return
+                    
+                    # Store the resource source and calculate transport time
+                    self.resource_sources[input_resource] = deposit
+                    distance = self.get_distance_to(deposit.tile)
+                    self.input_transport_times[input_resource] = distance * TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE
+            
+            # Set up resource requests
             self.resource_requests = {}
             self.resource_requests[recipe['input1']] = 1
             if recipe['input2']:
                 self.resource_requests[recipe['input2']] = 1
                 
-            # Calculate transport time for input resources
-            distance = self.get_distance_to(self.resource_source.tile)
-            self.input_transport_time = distance * TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE
+            # Move to requesting state
             self.processing_state = "requesting_resources"
             
             # Log resource request
@@ -224,39 +228,47 @@ class Building:
                                         f"Requesting {resource_list} for {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
             
         elif self.processing_state == "requesting_resources":
-            # Wait for resources to arrive
-            self.input_transport_time -= dt
-            if self.input_transport_time <= 0:
-                # Check if source deposit still has the resources
-                have_resources = True
-                for resource, amount in self.resource_requests.items():
-                    if not self.has_resource_in_deposit(self.resource_source, resource, amount):
-                        have_resources = False
-                        break
-                        
-                if have_resources:
-                    # Take resources from deposit
-                    for resource, amount in self.resource_requests.items():
-                        self.resource_source.resources[resource] -= amount
-                        self.resources[resource] = self.resources.get(resource, 0) + amount
+            # Update transport times for each input resource
+            have_all_resources = True
+            all_resources_arrived = True
+
+            for resource, deposit in self.resource_sources.items():
+                # Check if the resource is still available at the deposit
+                if not self.has_resource_in_deposit(deposit, resource, 1):
+                    have_all_resources = False
+                    break
+                
+                # Check if the resource has arrived yet
+                if resource in self.input_transport_times and self.input_transport_times[resource] > 0:
+                    self.input_transport_times[resource] -= dt
+                    all_resources_arrived = False  # At least one resource hasn't arrived yet
                     
-                    # Start processing
-                    self.processing_state = "processing"
-                    self.processing_progress = 0
-                    
-                    # Log processing start
-                    if Game.instance:
-                        Game.instance.logger.log('PROCESSING', 'START', 
-                                               f"Started processing {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
-                else:
-                    # Resources no longer available, reset and try again
-                    self.processing_state = "idle"
-                    self.resource_source = None
-                    
-                    # Log resource shortage
-                    if Game.instance:
-                        Game.instance.logger.log('PROCESSING', 'ERROR', 
-                                               f"Resources no longer available at source deposit for {self.selected_recipe}")
+            if not have_all_resources:
+                # If resources are no longer available, reset and try again
+                self.processing_state = "idle"
+                self.resource_sources = {}
+                
+                # Log resource shortage
+                if Game.instance:
+                    Game.instance.logger.log('PROCESSING', 'ERROR', 
+                                          f"Resources no longer available at source deposits for {self.selected_recipe}")
+                return
+                
+            if all_resources_arrived:
+                # When all resources have arrived, take them from deposits and start processing
+                for resource, deposit in self.resource_sources.items():
+                    # Take resources from deposits
+                    deposit.resources[resource] -= 1
+                    self.resources[resource] = self.resources.get(resource, 0) + 1
+                
+                # Start processing
+                self.processing_state = "processing"
+                self.processing_progress = 0
+                
+                # Log processing start
+                if Game.instance:
+                    Game.instance.logger.log('PROCESSING', 'START', 
+                                          f"Started processing {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
             
         elif self.processing_state == "processing":
             # Process the resources
@@ -291,8 +303,8 @@ class Building:
                 output_resource = recipe['output']
                 output_amount = recipe.get('output_amount', 1)
                 
-                # Check if target deposit still has space
-                if self.output_target.get_total_resources() + output_amount <= DEPOSIT_SIZE:
+                # Check if target deposit can accept the resource (checks both total capacity and resource type limit)
+                if self.output_target.can_accept_resource(output_resource, output_amount):
                     # Deliver the output
                     self.output_target.resources[output_resource] = self.output_target.resources.get(output_resource, 0) + output_amount
                     self.resources[output_resource] = 0
@@ -302,9 +314,9 @@ class Building:
                         Game.instance.logger.log('PROCESSING', 'DELIVERY', 
                                                f"Delivered {output_amount} {output_resource} to deposit at ({self.output_target.tile.x}, {self.output_target.tile.y})")
                 else:
-                    # Target deposit is full, find a new one
+                    # Target deposit is full or can't accept the resource type, find a new one
                     new_target = self.find_closest_deposit_with_space()
-                    if new_target:
+                    if new_target and new_target.can_accept_resource(output_resource, output_amount):
                         self.output_target = new_target
                         # Recalculate transport time
                         distance = self.get_distance_to(self.output_target.tile)
@@ -316,16 +328,16 @@ class Building:
                                                   f"Rerouting output delivery to deposit at ({new_target.tile.x}, {new_target.tile.y})")
                         return
                     else:
-                        # No available deposit, keep output in processor
+                        # No available deposit with space, keep output in processor
                         # Log storage
                         if Game.instance:
                             Game.instance.logger.log('PROCESSING', 'STORAGE', 
-                                                  f"Storing {output_amount} {output_resource} in processor - no available deposits")
+                                                  f"Storing {output_amount} {output_resource} in processor - no available deposits with space")
                 
                 # Reset to idle state to start a new processing cycle
                 self.processing_state = "idle"
-                self.resource_source = None
-                self.output_target = None
+                self.resource_sources = {}  # Clear resource sources for next cycle
+                self.output_target = None   # Will be re-checked in next cycle
     
     def get_deposit_building(self, target):
         """Helper method to get the Building object from a target, whether it's a Tile or Building"""
@@ -478,26 +490,26 @@ class Building:
     def can_accept_resource(self, resource_type, amount):
         """Check if deposit can accept more of a resource"""
         from config import DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
+        from game import Game
         
         # Check if we have enough space in total
         current_total = self.get_total_resources()
         if current_total + amount > DEPOSIT_SIZE:
-            return False
-            
-        # If the resource is already in the deposit, we can accept more of it
-        if resource_type in self.resources:
-            return True
-            
-        # Check if we're at the limit of different resource types
-        current_unique_resources = len(self.resources.keys())
-        if current_unique_resources >= MAX_RESOURCE_TYPES_PER_DEPOSIT:
-            from game import Game
             if Game.instance:
-                Game.instance.logger.log('DEPOSIT', 'LIMIT', 
-                    f"Deposit at ({self.tile.x}, {self.tile.y}) reached the limit of {MAX_RESOURCE_TYPES_PER_DEPOSIT} different resource types")
+                Game.instance.logger.log('DEPOSIT', 'CAPACITY', 
+                    f"Deposit at ({self.tile.x}, {self.tile.y}) is at capacity: {current_total}/{DEPOSIT_SIZE}, cannot add {amount} more")
             return False
             
-        # We have space and we're not at the resource type limit
+        # Resource is new to this deposit - check if we're at the type limit
+        if resource_type not in self.resources:
+            current_unique_resources = len(self.resources.keys())
+            if current_unique_resources >= MAX_RESOURCE_TYPES_PER_DEPOSIT:
+                if Game.instance:
+                    Game.instance.logger.log('DEPOSIT', 'LIMIT', 
+                        f"Deposit at ({self.tile.x}, {self.tile.y}) reached the limit of {MAX_RESOURCE_TYPES_PER_DEPOSIT} different resource types")
+                return False
+        
+        # Either this resource is already in the deposit, or we have space for a new type
         return True
 
     def process_resources(self):

@@ -17,6 +17,7 @@ class Player:
         if self.can_afford(cost):
             self.money -= cost
             tile.owner = 'player'
+            tile.surveyed = True  # Auto-survey when buying a tile
             self.owned_tiles.append(tile)
             # Update stats
             from game import Game
