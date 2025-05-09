@@ -879,7 +879,8 @@ class UI:
         if self.building_menu_rect and self.building_menu_rect.collidepoint(pos):
             for button_id, (rect, data) in self.menu_buttons.items():
                 if rect.collidepoint(pos):
-                    if button_id.startswith('deposit_'):                        # Set collection station target
+                    if button_id.startswith('deposit_'):                        
+                        # Set collection station target
                         if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
                             self.selected_tile.building_instance.target_deposit = data
                     elif button_id.startswith('sell_all_'):
@@ -947,15 +948,20 @@ class UI:
                     elif button_id == 'select_recipe':
                         # Select the currently displayed recipe
                         if hasattr(self.selected_tile, 'building_instance') and self.selected_tile.building_instance:
-                            # Only change recipe if not currently processing
-                            if self.selected_tile.building_instance.processing_state == "idle":
+                            building_instance = self.selected_tile.building_instance
+                            # Can change recipe if either:
+                            # 1. The building is in idle state
+                            # 2. The building is inactive (regardless of state)
+                            if building_instance.selected_recipe is not None and hasattr(self.selected_tile.building_instance, 'is_inactive') and self.selected_tile.building_instance.is_inactive:
+                                building_instance.selected_recipe = None
+                            elif building_instance.processing_state == "idle" or building_instance.is_inactive:
                                 recipe_name = data
-                                self.selected_tile.building_instance.selected_recipe = recipe_name
+                                building_instance.selected_recipe = recipe_name
                                 Game.instance.logger.log('PROCESSING', 'SELECT', 
                                     f'Selected recipe {recipe_name} at ({self.selected_tile.x}, {self.selected_tile.y})')
                             else:
                                 Game.instance.logger.log('PROCESSING', 'ERROR', 
-                                    f'Cannot change recipe while processing at ({self.selected_tile.x}, {self.selected_tile.y})')
+                                    f'Cannot change recipe while active and processing. Set to inactive first at ({self.selected_tile.x}, {self.selected_tile.y})')
                     # Commerce station buttons
                     elif button_id == 'resource_prev':
                         # Select previous resource for commerce

@@ -30,7 +30,7 @@ class Building:
         self.output_transport_time = 0
         self.resource_source = None  # Source deposit for input resources
         self.output_target = None  # Target deposit for output
-        self.is_inactive = False  # Whether the processing building is active
+        self.is_inactive = True  # Whether the processing building is inactive (default to inactive)
         
         # Commerce building attributes
         self.commerce_resource = None  # Resource type being traded
@@ -44,9 +44,7 @@ class Building:
         if self.type == 'COLLECTION':
             self.update_collection(dt)
         elif self.type == 'PROCESSING':
-            # Skip processing update if inactive
-            if not self.is_inactive:
-                self.update_processing(dt)
+            self.update_processing(dt)
         elif self.type == 'DEPOSIT':
             self.update_deposit(dt)
         elif self.type == 'COMMERCE':
@@ -169,12 +167,34 @@ class Building:
                         target_tile = self.target_deposit.tile
                     distance = self.get_distance_to(target_tile)
                     self.transport_time = distance * TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE
-    
+                    
     def update_processing(self, dt):
         """Handle processing building functionality"""
         from config import RECIPES, TRANSPORT_DURATION_PER_UNIT_OF_DISTANCE, DEPOSIT_SIZE, MAX_RESOURCE_TYPES_PER_DEPOSIT
         from game import Game
+        import pygame
         
+        # Check if the station just became inactive while in the middle of a process
+        # This should void any in-progress recipe
+        if self.is_inactive and self.processing_state != "idle":
+            # If we were in the middle of processing something, reset and void the recipe
+            if self.processing_state == "processing":
+                # Log the voided process
+                if Game.instance:
+                    current_time = pygame.time.get_ticks() / 1000.0
+                    if current_time - self.last_error_log_time >= self.error_log_cooldown:
+                        Game.instance.logger.log('PROCESSING', 'VOID', 
+                                              f"Process voided due to deactivation: {self.selected_recipe} at ({self.tile.x}, {self.tile.y})")
+                        self.last_error_log_time = current_time
+            
+            # Reset to idle state and clear all processing data
+            self.processing_state = "idle"
+            self.resource_sources = {}
+            self.input_transport_times = {}
+            self.output_target = None
+            self.processing_progress = 0
+            return
+            
         # Skip processing if inactive
         if self.is_inactive:
             return

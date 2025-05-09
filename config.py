@@ -181,4 +181,4 @@ MARKET_MIN_PRICE_MULTIPLIER = 0.4  # Minimum multiplier from base price (lower f
 DEBUG_LOGGER = False  # Whether to show the in-game log UI
 LOGGER_SHOW_PLAYER = True  # Whether to show player-related logs (PLAYER source)
 LOGGER_SHOW_AI = True      # Whether to show AI-related logs (AI-x source)
-LOGGER_SHOW_BUILDING = False  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)
+LOGGER_SHOW_BUILDING = True  # Whether to show building-related logs (DEPOSIT, PROCESSING, COLLECTION, COMMERCE sources)

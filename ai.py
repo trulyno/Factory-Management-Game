@@ -486,9 +486,14 @@ class AIFactory:
         
         # Process each building
         for tile in processing_buildings:
-            # Skip if already has a recipe selected and is working
-            if (tile.building_instance.selected_recipe and 
-                tile.building_instance.processing_state != 'idle'):
+            # Evaluate the recipe if:
+            # 1. Building is inactive (can always change recipe when inactive)
+            # 2. Has no recipe selected
+            # 3. Has a recipe but isn't currently processing (idle state)
+            
+            if not (tile.building_instance.is_inactive or 
+                   not tile.building_instance.selected_recipe or
+                   tile.building_instance.processing_state == 'idle'):
                 continue
             
             # Pick the best recipe based on available resources
@@ -527,10 +532,15 @@ class AIFactory:
                 tile.building_instance.selected_recipe = best_recipe
                 self.log(f"Decision: Set processing building at ({tile.x}, {tile.y}) to recipe {best_recipe}")
                 
-                # Make sure the building is active
+                # Make sure the building is active after setting a recipe
                 tile.building_instance.is_inactive = False
+                self.log(f"Decision: Activated processing building at ({tile.x}, {tile.y})")
             else:
                 self.log(f"Decision: No suitable recipe found for processing building at ({tile.x}, {tile.y})")
+                
+                # Set to inactive if no recipe is found
+                tile.building_instance.is_inactive = True
+                self.log(f"Decision: Deactivated processing building at ({tile.x}, {tile.y}) due to no suitable recipe")
                 
     def _manage_commerce_buildings(self):
         """Configure and manage commerce buildings"""
